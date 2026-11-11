@@ -150,9 +150,10 @@ svg text { font-family: var(--font); }
 .drag:active { cursor: grabbing; }
 .drag:focus { outline: none; }
 .drag:focus-visible .focus-ring { stroke: #3E8E84; stroke-width: 3; }
-@keyframes fall { from { transform: translateY(0); opacity: .9; } to { transform: translateY(26px); opacity: 0; } }
-.rain line { animation: fall .7s linear infinite; }
-@media (prefers-reduced-motion: reduce) { .rain line { animation: none; } }
+@keyframes fall { from { transform: translateY(-4px); opacity: 0; } 25% { opacity: .9; } to { transform: translateY(14px); opacity: 0; } }
+.rain .drop { animation: fall 1.1s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .rain .drop { animation: none; } }
+.stg-l { font-weight: 800; margin-right: 2px; }
 
 /* 대기 안정도: 공기 덩어리 조작 줄 · 상태 표시 */
 .manip-bar { margin-top: 8px; padding: 6px 10px; background: #fff; border: 1px solid var(--line); border-radius: 12px; gap: 8px 12px; }

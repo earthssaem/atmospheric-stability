@@ -37,6 +37,9 @@ const FoehnLab = (function () {
     return arr.filter((x, i) => arr.findIndex(y => Math.abs(y[1] - x[1]) < 1e-9) === i);
   }
   const STAGE_NAME = { start: '출발', lcl: '응결 시작', summit: '정상', arrive: '도착' };
+  const STAGE_LETTER = { start: 'A', lcl: 'B', summit: 'C', arrive: 'D' };      // 산 그림 · 표 · 단계 버튼에 같은 기호
+  const stageTxt = (k, name) => `${STAGE_LETTER[k]} ${name || STAGE_NAME[k]}`;
+  const stageHtml = (k, name) => `<b class="stg-l">${STAGE_LETTER[k]}</b> ${name || STAGE_NAME[k]}`;
 
   /* ───────── 화면 만들기 ───────── */
   function init(root) {
@@ -72,7 +75,7 @@ const FoehnLab = (function () {
     ui.stages = h('div', { class: 'stages', role: 'group', 'aria-label': '단계 이동' });
     ui.stageBtns = {};
     ['start', 'lcl', 'summit', 'arrive'].forEach(k => {
-      const b = Btn(STAGE_NAME[k], 'sm', () => goStage(k));
+      const b = Btn(stageHtml(k), 'sm', () => goStage(k));
       ui.stageBtns[k] = b; ui.stages.appendChild(b);
     });
     ui.prog = h('input', { type: 'range', min: 0, max: 1000, step: 1, value: 0, 'aria-label': '여정 진행' });
@@ -287,71 +290,6 @@ const FoehnLab = (function () {
     });
   }
 
-  /* ───────── 기류 (streamline) ─────────
-   * 산(올린 코사인)보다 넓고 완만한 혹을 그리는 곡선 2줄: 풍상측에서 오르고 정상을 지나 풍하측으로 내려간다.
-   * 곡선 위 작은 화살표의 위치는 진행(st.s)만으로 정해져, 재생·일시정지·단계 이동·처음부터와 항상 맞는다. */
-  function buildFlow(svg, f, G) {
-    const y0 = f.yOf(0), Mpx = y0 - f.yOf(st.M), topY = f.yOf(ZMAX) + 34;     // 바람 방향 표시 아래까지만
-    const bump = (x, wk) => { const u = Math.abs(x - G.xs) / wk; return u >= 1 ? 0 : 0.5 + 0.5 * Math.cos(Math.PI * u); };
-    const specs = [
-      { h: 24, A: Mpx, wf: 1.4 },                     // 지면 가까이: 비탈을 따라 오르내림 (공기 덩어리와 겹치지 않게 비탈에서 조금 더 띄움)
-      { h: 0.4 * Mpx + 76, A: 0.6 * Mpx, wf: 1.9 }     // 위쪽: 정상 글자와 구름 위로 완만하게
-    ];
-    const up = specs[1], room = y0 - topY;
-    if (up.h + up.A > room) { const k = Math.max(0, room) / (up.h + up.A); up.h *= k; up.A *= k; }
-    const id = uid('fm');
-    const mask = s('mask', { id, maskUnits: 'userSpaceOnUse', x: 0, y: 0, width: G.W, height: f.H }, s('defs', null, svg));
-    s('rect', { x: 0, y: 0, width: G.W, height: f.H, fill: '#fff' }, mask);
-    E.flowHoles = s('g', null, mask); E.flowHoleKey = null;      // 비·글자 자리는 비움
-    const g = s('g', { class: 'flow', 'aria-hidden': 'true', mask: `url(#${id})` }, svg);
-    const lines = [];
-    specs.forEach((sp, k) => {
-      if (k === 1 && sp.h + sp.A < specs[0].h + specs[0].A + 18) return;   // 위 곡선이 들어갈 자리가 없으면 한 줄만
-      const pts = [], L = [0];
-      for (let x = 0; x <= G.W + 0.01; x += 3) pts.push([x, y0 - sp.h - sp.A * bump(x, G.w * sp.wf)]);
-      for (let i = 1; i < pts.length; i++) L.push(L[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
-      s('path', { d: pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' '), fill: 'none', stroke: '#5F6E7B', 'stroke-width': 1.6, 'stroke-linecap': 'round', opacity: 0.4 }, g);
-      const total = L[L.length - 1], gap = 130, marks = [];
-      for (let i = 0; i < Math.ceil(total / gap) + 1; i++) {
-        marks.push(s('path', { d: 'M-13 0 L-3 0 M2 0 L-4 -3.3 L-4 3.3 Z', fill: '#4E5D6A', stroke: '#4E5D6A', 'stroke-width': 1.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: 0 }, g));
-      }
-      lines.push({ pts, L, total, gap, marks, phase: k * gap / 2 });
-    });
-    return lines;
-  }
-  /** 곡선 위 길이 d 지점의 위치와 방향(도) */
-  function flowPoint(ln, d) {
-    let lo = 0, hi = ln.L.length - 1;
-    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (ln.L[m] < d) lo = m; else hi = m; }
-    const a = ln.pts[lo], b = ln.pts[hi], t = clamp((d - ln.L[lo]) / Math.max(1e-6, ln.L[hi] - ln.L[lo]), 0, 1);
-    return [lerp(a[0], b[0], t), lerp(a[1], b[1], t), Math.atan2(b[1] - a[1], b[0] - a[0]) * 180 / Math.PI];
-  }
-  function renderFlow() {
-    (E.flowLines || []).forEach(ln => {
-      const off = (st.s * ln.total + ln.phase) % ln.gap;      // 공기 덩어리와 같은 빠르기로 곡선을 따라 이동
-      ln.marks.forEach((m, i) => {
-        const d = off + i * ln.gap;
-        const op = 0.75 * clamp(Math.min(d - 14, ln.total - d) / 24, 0, 1);   // 양 끝에서는 서서히 나타나고 사라짐
-        if (op <= 0) { sa(m, { opacity: 0 }); return; }
-        const [x, y, ang] = flowPoint(ln, d);
-        sa(m, { transform: `translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${ang.toFixed(1)})`, opacity: op.toFixed(2) });
-      });
-    });
-    // 기류가 비·글자와 겹치지 않게 그 자리만 비움 (구름은 기류 위에 그려 가림)
-    const holes = [];
-    const box = (el, pad, fall) => {
-      if (!el || el.getAttribute('opacity') === '0') return;
-      try { const b = el.getBBox(); if (b.width || b.height) holes.push([b.x - pad, b.y - pad, b.width + 2 * pad, b.height + 2 * pad + (fall || 0)]); } catch (e) { /* 무시 */ }
-    };
-    [E.sLCLt, E.rainT, E.dryT, E.peak, ...(E.ticks || []), ...E.abcd.querySelectorAll('text')].forEach(el => box(el, 4));
-    [...E.rain.children].forEach(l => box(l, 4, 26));        // 빗줄기는 아래로 26px 떨어지는 애니메이션
-    const hk = holes.map(b => b.map(v => Math.round(v)).join(',')).join('|');
-    if (hk !== E.flowHoleKey) {
-      E.flowHoleKey = hk; clear(E.flowHoles);
-      holes.forEach(([x, y, w, h2]) => s('rect', { x, y, width: w, height: h2, rx: 4, fill: '#000' }, E.flowHoles));
-    }
-  }
-
   function buildScene(f) {
     const svg = sh.sceneSvg; clear(svg);
     const G = geo(f); E.geo = G;
@@ -376,7 +314,6 @@ const FoehnLab = (function () {
     E.ticks = [];
     if (f.stacked) for (let z = 0; z <= 3; z++) E.ticks.push(txt({ x: G.W - 8, y: f.yOf(z) - 5, 'text-anchor': 'end', class: 'tk' }, z + ' km', svg));
     // 응결 고도 · 구름 · 비 · 경로
-    E.flowLines = buildFlow(svg, f, G);    // 기류 곡선 (구름·비·글자보다 아래)
     E.sLCL = s('line', { stroke: 'var(--lcl)', 'stroke-width': 2.5, 'stroke-dasharray': '12 5 3 5' }, svg);
     E.cloud = s('g', null, svg); E.cloudKey = null;
     E.rain = s('g', { class: 'rain' }, svg); E.rainKey = null;
@@ -513,8 +450,8 @@ const FoehnLab = (function () {
         const R2 = rng(5);
         for (let i = 0; i < Math.max(3, n); i++) {
           const zz = fo.H + (zTopUp - fo.H) * (i + 0.5) / Math.max(3, n);
-          const x = G.xAt(zz, 'up') - 18 - R2() * 14, y = f.yOf(zz) + 2;
-          const l = s('line', { x1: x, y1: y, x2: x + 3, y2: y + 13, stroke: '#4F86B5', 'stroke-width': 2.2, 'stroke-linecap': 'round' }, E.rain);
+          const x = G.xAt(zz, 'up') - 16 - R2() * 18, y = f.yOf(zz) + 6 + R2() * 8;
+          const l = s('path', { class: 'drop', d: `M${x.toFixed(1)} ${(y - 4.5).toFixed(1)} C${(x + 1.6).toFixed(1)} ${(y - 1.5).toFixed(1)} ${(x + 2.8).toFixed(1)} ${y.toFixed(1)} ${(x + 2.8).toFixed(1)} ${(y + 1.4).toFixed(1)} A2.8 2.8 0 0 1 ${(x - 2.8).toFixed(1)} ${(y + 1.4).toFixed(1)} C${(x - 2.8).toFixed(1)} ${y.toFixed(1)} ${(x - 1.6).toFixed(1)} ${(y - 1.5).toFixed(1)} ${x.toFixed(1)} ${(y - 4.5).toFixed(1)} Z`, fill: '#4F86B5', opacity: 0.85 }, E.rain);
           l.style.animationDelay = (i * 0.11) + 's';
         }
       }
@@ -541,10 +478,9 @@ const FoehnLab = (function () {
       if (!placed) sa(E.peak, { x: cands[0][0], y: cands[0][1], 'text-anchor': cands[0][2] });
     }
     const rad = 13 + 2 * cur.z;
-    renderFlow();
     // 공기 덩어리
     E.parcel.set(px, yz, rad, cur.precipitating ? 0.7 : 0);
-    sa(E.parcel.g, { 'aria-valuenow': Math.round(st.s * 100), 'aria-valuetext': `${STAGE_NAME[atStage(fo)] || ''} 높이 ${fZ(cur.z)} km, 기온 ${fT(cur.T)} ℃, 이슬점 ${fT(cur.Td)} ℃` });
+    sa(E.parcel.g, { 'aria-valuenow': Math.round(st.s * 100), 'aria-valuetext': `${atStage(fo) ? stageTxt(atStage(fo)) : ''} 높이 ${fZ(cur.z)} km, 기온 ${fT(cur.T)} ℃, 이슬점 ${fT(cur.Td)} ℃` });
     sa(E.sNow, { y1: yz, y2: yz });
     sa(E.sNowBg, { x: G.W - 68, y: yz - 12 }); sa(E.sNowT, { x: G.W - 10, y: yz + 5 }); E.sNowT.textContent = `${fZ(cur.z)} km`;
 
@@ -584,9 +520,11 @@ const FoehnLab = (function () {
       s('circle', { cx: xt, cy: y, r: 4.5, fill: '#fff', stroke: 'var(--temp)', 'stroke-width': 2 }, E.marks);
       if (!sp.saturated) s('circle', { cx: ax.gx(sp.Td), cy: y, r: 4.5, fill: '#fff', stroke: 'var(--dew)', 'stroke-width': 2 }, E.marks);
       if ((k === 'start' || k === 'arrive') && Math.abs(sv - st.s) > 1e-9) {
-        const right = k === 'arrive' ? fo.arrival.T >= fo.start.T : fo.arrival.T < fo.start.T;
+        // 출발 글자는 오른쪽(오르는 선은 왼쪽 위로 감), 도착점이 바로 오른쪽에 붙어 있으면 왼쪽
+        const gapA = ax.gx(fo.arrival.T) - ax.gx(fo.start.T);
+        const right = k === 'arrive' ? fo.arrival.T >= fo.start.T : !(gapA > 0 && gapA < 90);
         if (k === 'arrive' && Math.abs(fo.arrival.T - fo.start.T) < 1e-9) return;
-        txt({ x: xt + (right ? 8 : -8), y: y - 9, 'text-anchor': right ? 'start' : 'end', class: 'lb-sm halo', fill: '#4E5D6A' }, STAGE_NAME[k], E.marks);
+        txt({ x: xt + (right ? 8 : -8), y: y - 9, 'text-anchor': right ? 'start' : 'end', class: 'lb-sm halo', fill: '#4E5D6A' }, stageTxt(k), E.marks);
       }
     });
     clear(E.segLbl);
@@ -599,7 +537,7 @@ const FoehnLab = (function () {
     /* 수치 */
     const rh = Physics.relHumidity(cur.T, cur.Td);
     const stg = atStage(fo);
-    let whereTxt = stg ? STAGE_NAME[stg] : (pos.seg === 'flatUp' ? '풍상측 평지' : pos.seg === 'flatDown' ? '풍하측 평지' : pos.side === 'up' ? '풍상측 상승' : '풍하측 하강');
+    let whereTxt = stg ? stageTxt(stg) : (pos.seg === 'flatUp' ? '풍상측 평지' : pos.seg === 'flatDown' ? '풍하측 평지' : pos.side === 'up' ? '풍상측 상승' : '풍하측 하강');
     if (stg === 'lcl' && stg && Math.abs(stagePos(fo).lcl - stagePos(fo).summit) < 1e-9) whereTxt = '정상 · 응결 시작';
     ui.ro.set('where', `<span style="font-size:22px">${whereTxt}</span>`, st.s >= 1 - 1e-9 ? '풍하측 도착' : (pos.side === 'up' ? '풍상측 → 산 위' : '산 위 → 풍하측'));
     let cmpT = '', cmpD = '';
@@ -647,8 +585,8 @@ const FoehnLab = (function () {
     const rows = [['start', fo.start], ['lcl', fo.lclPoint], ['summit', fo.summit], ['arrive', fo.arrival]];
     let html = '<table class="stage-table"><thead><tr><th>단계</th><th>높이</th><th>기온</th><th>이슬점</th><th>상대 습도</th></tr></thead><tbody>';
     rows.forEach(([k, p]) => {
-      if (!p) { html += `<tr><td>${STAGE_NAME[k]}</td><td colspan="4" style="text-align:left;color:var(--muted)">정상까지 응결하지 않음</td></tr>`; return; }
-      html += `<tr class="${stg === k ? 'cur' : ''}"><td>${STAGE_NAME[k]}</td><td>${fZ(p.z)} km</td><td class="t">${fT(p.T)} ℃</td><td class="d">${fT(p.Td)} ℃</td><td>${fmt(Physics.relHumidity(p.T, p.Td), 0)} %</td></tr>`;
+      if (!p) { html += `<tr><td>${stageHtml(k)}</td><td colspan="4" style="text-align:left;color:var(--muted)">정상까지 응결하지 않음</td></tr>`; return; }
+      html += `<tr class="${stg === k ? 'cur' : ''}"><td>${stageHtml(k)}</td><td>${fZ(p.z)} km</td><td class="t">${fT(p.T)} ℃</td><td class="d">${fT(p.Td)} ℃</td><td>${fmt(Physics.relHumidity(p.T, p.Td), 0)} %</td></tr>`;
     });
     html += '</tbody></table>';
     html += `<p class="note">출발 → 도착: 기온 ${signed(fo.dT)} ℃, 이슬점 ${signed(fo.dTd)} ℃</p>`;
@@ -667,7 +605,7 @@ const FoehnLab = (function () {
       b.setAttribute('aria-pressed', P[k] != null && Math.abs(P[k] - st.s) < 1e-9 ? 'true' : 'false');
       b.title = P[k] == null ? '이 조건에서는 정상까지 응결이 일어나지 않아요' : '';
       b.classList.toggle('muted', P[k] == null);
-      b.innerHTML = k === 'lcl' && P.lcl != null && Math.abs(P.lcl - P.summit) < 1e-9 ? '응결 시작(=정상)' : (k === 'lcl' && P.lcl === 0 ? '응결 시작(=출발)' : STAGE_NAME[k]);
+      b.innerHTML = stageHtml(k, k === 'lcl' && P.lcl != null && Math.abs(P.lcl - P.summit) < 1e-9 ? '응결 시작(=정상)' : (k === 'lcl' && P.lcl === 0 ? '응결 시작(=출발)' : null));
     });
     void cur;
     if (document.activeElement !== ui.prog) ui.prog.value = Math.round(st.s * 1000);
