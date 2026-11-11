@@ -24,6 +24,13 @@ const App = (function () {
     if (TABS[id]) TABS[id].onShow();
   }
 
+  function goHome() {
+    show('lcl');
+    const t = TABS.lcl;
+    if (t && t.api && t.api.resetMotion) t.api.resetMotion();
+    scrollTo(0, 0); document.body.scrollTop = 0;   // 좁은 화면에서 스크롤한 경우 맨 위로
+  }
+
   function init() {
     ORDER.forEach(k => { if (TABS[k]) TABS[k].init($('lab-' + k)); });
     ORDER.forEach((k, i) => {
@@ -40,8 +47,9 @@ const App = (function () {
         show(ORDER[j], true);
       });
     });
-    // 제목을 누르면 처음 화면(1. 응결 고도)으로 — 다른 탭의 조건·진행은 그대로 둔다
-    $('homeLink').addEventListener('click', e => { e.preventDefault(); show('lcl'); scrollTo(0, 0); document.body.scrollTop = 0; });
+    // 제목을 누르면 처음 화면(1. 응결 고도 · 공기 덩어리 지표)으로
+    // 1탭은 보던 위치(공기 덩어리 높이)만 「움직임 처음으로」와 같이 되돌리고, 조건·실험 방식·비교 기록과 다른 탭은 그대로 둔다
+    $('homeLink').addEventListener('click', e => { e.preventDefault(); goHome(); });
 
     // 화면 크기가 바뀌면 다시 배치
     let rt = null;
