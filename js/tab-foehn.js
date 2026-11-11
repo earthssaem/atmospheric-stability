@@ -255,6 +255,38 @@ const FoehnLab = (function () {
     };
     return { W, xS, xFU, xs, xFD, xD, w, zAt, xAt, xOfS };
   }
+  /** 산 위의 A(출발) · B(응결 시작) · C(정상) · D(도착) 점과 글자. B는 조건에 따라 옮겨지고, 겹치면 'A·B', 'B·C'로 합침 */
+  function renderABCD(f, G, fo, avoidEls) {
+    const y0 = f.yOf(0), yM = f.yOf(st.M);
+    const hasB = fo.reachesSat, bAtA = hasB && fo.H <= 1e-9, bAtC = hasB && Math.abs(fo.H - st.M) < 1e-9;
+    const avoid = avoidEls.filter(el => el && el.getAttribute('opacity') !== '0').map(el => { try { return el.getBBox(); } catch (e) { return null; } }).filter(Boolean);
+    const key = `${G.W}|${f.H}|${st.M}|${hasB}|${hasB ? fo.H.toFixed(4) : ''}|` + avoid.map(b => [b.x, b.y, b.width].map(Math.round).join(',')).join(';');
+    if (key === E.abcdKey) return;
+    E.abcdKey = key; clear(E.abcd);
+    const pts = [
+      { t: bAtA ? 'A·B' : 'A', x: G.xS, y: y0, c: [[G.xS - 14, y0 + 20, 'end'], [G.xS + 14, y0 + 20, 'start']] },   // 출발점 왼쪽 아래 (그 자리의 공기 덩어리에 가리지 않게), 자리가 없으면 오른쪽
+      { t: bAtC ? 'B·C' : 'C', x: G.xs, y: yM, c: [[G.xs + 22, yM - 4, 'start'], [G.xs + 24, yM + 16, 'start']] },   // 정상 오른쪽 (구름은 왼쪽 비탈)
+      { t: 'D', x: G.xD, y: y0, lx: G.xD + 14, ly: y0 + 20, an: 'start' }                   // 도착점 오른쪽 아래
+    ];
+    if (hasB && !bAtA && !bAtC) {      // 비탈 안쪽 (바깥은 구름·응결 고도 글자). 글자와 겹치면 조금 아래로
+      const yB = f.yOf(fo.H), xB = G.xAt(fo.H, 'up');
+      pts.push({ t: 'B', x: xB, y: yB, c: [[xB + 10, yB + 5, 'start'], [xB + 12, yB + 20, 'start'], [xB + 16, yB + 34, 'start']] });
+    }
+    const hit = (a, b) => !(a.x + a.width + 4 < b.x || b.x + b.width + 4 < a.x || a.y + a.height + 4 < b.y || b.y + b.height + 4 < a.y);
+    pts.forEach(p => {
+      s('circle', { cx: p.x.toFixed(1), cy: p.y.toFixed(1), r: 4, fill: '#2F3B45', stroke: '#fff', 'stroke-width': 1.5 }, E.abcd);
+      const t = txt({ class: 'abcd-t halo-sky', fill: '#2F3B45' }, p.t, E.abcd);
+      const cands = p.c || [[p.lx, p.ly, p.an]];
+      let ok = false;
+      for (const [x, y, an] of cands) {
+        sa(t, { x: x.toFixed(1), y: y.toFixed(1), 'text-anchor': an });
+        let b; try { b = t.getBBox(); } catch (e) { b = null; }
+        if (!b || (b.x >= 2 && b.x + b.width <= G.W - 2 && !avoid.some(a => hit(a, b)))) { ok = true; break; }
+      }
+      if (!ok) sa(t, { x: cands[0][0].toFixed(1), y: cands[0][1].toFixed(1), 'text-anchor': cands[0][2] });
+    });
+  }
+
   /* ───────── 기류 (streamline) ─────────
    * 산(올린 코사인)보다 넓고 완만한 혹을 그리는 곡선 2줄: 풍상측에서 오르고 정상을 지나 풍하측으로 내려간다.
    * 곡선 위 작은 화살표의 위치는 진행(st.s)만으로 정해져, 재생·일시정지·단계 이동·처음부터와 항상 맞는다. */
@@ -311,7 +343,7 @@ const FoehnLab = (function () {
       if (!el || el.getAttribute('opacity') === '0') return;
       try { const b = el.getBBox(); if (b.width || b.height) holes.push([b.x - pad, b.y - pad, b.width + 2 * pad, b.height + 2 * pad + (fall || 0)]); } catch (e) { /* 무시 */ }
     };
-    [E.sLCLt, E.rainT, E.dryT, E.peak, ...(E.ticks || [])].forEach(el => box(el, 4));
+    [E.sLCLt, E.rainT, E.dryT, E.peak, ...(E.ticks || []), ...E.abcd.querySelectorAll('text')].forEach(el => box(el, 4));
     [...E.rain.children].forEach(l => box(l, 4, 26));        // 빗줄기는 아래로 26px 떨어지는 애니메이션
     const hk = holes.map(b => b.map(v => Math.round(v)).join(',')).join('|');
     if (hk !== E.flowHoleKey) {
@@ -349,6 +381,7 @@ const FoehnLab = (function () {
     E.cloud = s('g', null, svg); E.cloudKey = null;
     E.rain = s('g', { class: 'rain' }, svg); E.rainKey = null;
     svg.appendChild(E.wind);                 // 바람 방향 표시는 높은 산의 구름에 가리지 않게 위로
+    E.abcd = s('g', { class: 'abcd' }, svg); E.abcdKey = null;    // 교과서 그림처럼 A(출발) · B(응결 시작) · C(정상) · D(도착)
     E.rainT = txt({ class: 'lb-sm halo-sky', fill: '#1F5A88' }, '강수 → 수분이 빠져나가요', svg);
     E.sLCLt = txt({ class: 'lb-sm halo-sky', fill: '#7A4E10', 'text-anchor': 'end' }, '', svg);   // 구름 위에 써서 가리지 않게
     E.dryT = txt({ class: 'lb halo', fill: '#A13A2C', 'text-anchor': 'middle' }, '', svg);
@@ -460,20 +493,6 @@ const FoehnLab = (function () {
     sa(E.sLCL, { x1: 0, x2: fo.reachesSat ? G.xAt(fo.H, 'up') : G.xs, y1: yH, y2: yH, opacity: showL ? 1 : 0 });
     sa(E.sLCLt, { x: 8, 'text-anchor': 'start', y: yH - 7, opacity: showL ? 1 : 0 });
     E.sLCLt.textContent = fo.reachesSat ? `응결 고도 ${fZ(fo.H)} km` : `응결 고도 ${fZ(fo.H)} km (정상보다 높음)`;
-    // 정상 글자: 바람 방향·응결 고도 글자와 겹치면 정상 옆으로 비킴
-    {
-      const yM = f.yOf(st.M), bb = el => { try { return el.getBBox(); } catch (e) { return null; } };
-      const avoid = [E.wind, showL ? E.sLCLt : null].filter(Boolean).map(bb).filter(Boolean);
-      const hit = (a2, b2) => !(a2.x + a2.width + 4 < b2.x || b2.x + b2.width + 4 < a2.x || a2.y + a2.height + 4 < b2.y || b2.y + b2.height + 4 < a2.y);   // 4px 여유
-      const cands = [[G.xs, yM - 36, 'middle'], [G.xs + 18, yM + 4, 'start'], [G.xs + 22, yM + 24, 'start']];
-      let placed = false;
-      for (const [x, y, an] of cands) {
-        sa(E.peak, { x, y, 'text-anchor': an });
-        const pb = bb(E.peak);
-        if (!pb || !avoid.some(b2 => hit(pb, b2))) { placed = true; break; }
-      }
-      if (!placed) sa(E.peak, { x: cands[0][0], y: cands[0][1], 'text-anchor': cands[0][2] });
-    }
     // 구름: 풍상측에서 지나온 포화 구간 (진행 위치로만 결정)
     const zTopUp = pos.side === 'down' ? st.M : (pos.seg === 'flatUp' ? 0 : cur.z);
     const ck = fo.precipitates && zTopUp > fo.H + 0.02 ? `${fo.H.toFixed(3)}|${zTopUp.toFixed(3)}` : '';
@@ -502,10 +521,25 @@ const FoehnLab = (function () {
     }
     E.rain.classList.toggle('rain', st.playing && !REDUCED_MOTION);
     // 강수 글자: 응결 고도 글자 아래, 응결 고도가 지면 가까이면 그 위
-    sa(E.rainT, { x: 8, 'text-anchor': 'start', y: f.yOf(0) - yH < 44 ? yH - 30 : Math.min(f.yOf(0) - 10, yH + 26), opacity: ck ? 1 : 0 });
+    sa(E.rainT, { x: 8, 'text-anchor': 'start', y: f.yOf(0) - yH < 60 ? yH - 30 : yH + 44, opacity: ck ? 1 : 0 });
     const dryOn = st.s >= 1 - 1e-9 && fo.precipitates;
     sa(E.dryT, { x: G.W - 8, 'text-anchor': 'end', y: f.yOf(0) - 40, opacity: dryOn ? 1 : 0 });
     E.dryT.textContent = '도착: 더 따뜻하고 건조';
+    renderABCD(f, G, fo, [E.wind, showL ? E.sLCLt : null, ck ? E.rainT : null]);
+    // 정상 글자: 바람 방향·응결 고도·C 글자와 겹치면 정상 옆으로 비킴
+    {
+      const yM = f.yOf(st.M), bb = el => { try { return el.getBBox(); } catch (e) { return null; } };
+      const avoid = [E.wind, showL ? E.sLCLt : null, ...E.abcd.querySelectorAll('text')].filter(Boolean).map(bb).filter(Boolean);
+      const hit = (a2, b2) => !(a2.x + a2.width + 4 < b2.x || b2.x + b2.width + 4 < a2.x || a2.y + a2.height + 4 < b2.y || b2.y + b2.height + 4 < a2.y);   // 4px 여유
+      const cands = [[G.xs, yM - 36, 'middle'], [G.xs + 42, yM + 4, 'start'], [G.xs + 46, yM + 24, 'start']];
+      let placed = false;
+      for (const [x, y, an] of cands) {
+        sa(E.peak, { x, y, 'text-anchor': an });
+        const pb = bb(E.peak);
+        if (!pb || !avoid.some(b2 => hit(pb, b2))) { placed = true; break; }
+      }
+      if (!placed) sa(E.peak, { x: cands[0][0], y: cands[0][1], 'text-anchor': cands[0][2] });
+    }
     const rad = 13 + 2 * cur.z;
     renderFlow();
     // 공기 덩어리

@@ -216,6 +216,7 @@ svg text { font-family: var(--font); }
 .fold > summary::before { content: ''; width: 8px; height: 8px; border-right: 2.5px solid var(--ink-2); border-bottom: 2.5px solid var(--ink-2); transform: rotate(-45deg); transition: transform .15s; flex: none; }
 .fold[open] > summary::before { transform: rotate(45deg); }
 .fold > summary .tag { margin-left: auto; font-size: 13px; font-weight: 700; color: var(--muted); }
+.abcd-t { font-size: 16px; font-weight: 800; }
 .more-sec { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .more-sec h4 { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 16px; font-weight: 800; }
 .more-sec h4 .tag { font-size: 13px; font-weight: 700; color: var(--muted); }
