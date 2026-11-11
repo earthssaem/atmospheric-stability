@@ -1,6 +1,6 @@
 /**
- * tab-foehn.js — 2. 높새바람
- * 동쪽(영동, 오른쪽)에서 출발한 공기가 산을 넘어 서쪽(영서, 왼쪽)에 도착한다. 출발·도착 높이는 같은 0 km.
+ * tab-foehn.js — 2. 푄 현상
+ * 왼쪽(풍상측)에서 출발한 공기가 산을 넘어 오른쪽(풍하측)에 도착한다(문제집 그림과 같은 방향). 출발·도착 높이는 같은 0 km.
  * 모형: 풍상측에서 포화된 뒤 응결한 물은 비로 떨어져 공기에서 빠져나간다(교과서 모형).
  * 화면의 모든 상태는 진행 위치(s)와 조건만으로 정해진다 → 되감기·건너뛰기 순서와 무관하게 같은 상태.
  */
@@ -9,7 +9,7 @@
 const FoehnLab = (function () {
   const ZMAX = 3.5;
   const DUR = 14;                 // 전체 여정 재생 시간(초, 화면 표현용)
-  const SA = 0.08, SB = 0.5, SC = 0.92;   // 진행 구간: 동쪽 평지 | 풍상측 상승 | 풍하측 하강 | 서쪽 평지
+  const SA = 0.08, SB = 0.5, SC = 0.92;   // 진행 구간: 풍상측 평지 | 풍상측 상승 | 풍하측 하강 | 풍하측 평지
   const DEF = { T0: 20, Td0: 12, M: 2 };
   const L = Object.assign(baseLab(), { id: 'foehn' });
   const st = { T0: DEF.T0, Td0: DEF.Td0, M: DEF.M, s: 0, playing: false, guided: true, showPath: false, arrivedOnce: false, cmp: null, notice: '' };
@@ -20,10 +20,10 @@ const FoehnLab = (function () {
 
   /* 진행 위치 s → {side, z} */
   function posOf(s2, M) {
-    if (s2 <= SA) return { side: 'up', z: 0, seg: 'east' };
+    if (s2 <= SA) return { side: 'up', z: 0, seg: 'flatUp' };
     if (s2 <= SB) return { side: 'up', z: M * (s2 - SA) / (SB - SA), seg: 'up' };
     if (s2 <= SC) return { side: 'down', z: M * (1 - (s2 - SB) / (SC - SB)), seg: 'down' };
-    return { side: 'down', z: 0, seg: 'west' };
+    return { side: 'down', z: 0, seg: 'flatDown' };
   }
   function stateAt(f, s2) { const p = posOf(s2, f.M); return Object.assign(Physics.foehnAt(f, p.side, p.z), { seg: p.seg }); }
   /** 단계 위치. 응결 시작이 경로에 없으면 null */
@@ -42,8 +42,8 @@ const FoehnLab = (function () {
   function init(root) {
     sh = makeShell(root, {
       ratio: '55%', zMax: ZMAX,
-      sceneTitle: '산 단면 <span style="font-weight:600;color:var(--muted)">서쪽 · 영서 ← 동쪽 · 영동</span>', graphTitle: '높이–온도 그래프',
-      sceneLabel: '동쪽에서 산을 넘어 서쪽으로 이동하는 공기의 산 단면', graphLabel: '높새바람 경로의 높이에 따른 기온과 이슬점'
+      sceneTitle: '산 단면 <span style="font-weight:600;color:var(--muted)">풍상측 → 풍하측</span>', graphTitle: '높이–온도 그래프',
+      sceneLabel: '왼쪽 풍상측에서 산을 넘어 오른쪽 풍하측으로 이동하는 공기의 산 단면', graphLabel: '푄 현상 경로의 높이에 따른 기온과 이슬점'
     });
     ui.mode = Seg([{ value: true, label: '안내 실험' }, { value: false, label: '자유 탐구' }], true, v => setMode(v), { label: '실험 방식' });
     ui.T0 = NumField({ label: '출발 기온 T<sub>0</sub>', min: 0, max: 35, step: 0.1, sliderStep: 0.5, decimals: 1, value: st.T0, unit: '℃', onCommit: v => setCond({ T0: v }) });
@@ -90,10 +90,10 @@ const FoehnLab = (function () {
     const m = sh.more;
     ui.table = h('div');
     m.appendChild(Fold('단계별 표 — 출발 · 응결 시작 · 정상 · 도착', ui.table, false));
-    m.appendChild(Fold('높새바람의 원리', h('div', { html: `
-      <ul><li><b>풍상측(영동)</b>: 응결 고도까지 기온 −10, 이슬점 −2 ℃/km → 그 위는 둘 다 −5 ℃/km. 구름이 생기고 <b>비로 수분을 잃어요</b>.</li>
-      <li><b>풍하측(영서)</b>: 내려오며 기온 +10, 이슬점 +2 ℃/km.</li>
-      <li>그래서 도착한 공기는 출발 때보다 <b>더 따뜻하고 건조해요</b>.</li></ul>
+    m.appendChild(Fold('푄 현상의 원리', h('div', { html: `
+      <ul><li><b>풍상측</b>: 응결 고도까지 기온 −10, 이슬점 −2 ℃/km → 그 위는 둘 다 −5 ℃/km. 구름이 생기고 <b>비로 수분을 잃어요</b>.</li>
+      <li><b>풍하측</b>: 내려오며 기온 +10, 이슬점 +2 ℃/km.</li>
+      <li>그래서 도착한 공기는 출발 때보다 <b>더 따뜻하고 건조해요</b>. 우리나라 예: 늦봄~초여름 영서 지방의 <b>높새바람</b></li></ul>
       <p class="note">응결한 물은 모두 비로 떨어진다고 본 교과서 모형 · 그림 Ⅲ-13</p>` }), false));
     // 더 해 보기: 실험 2개 + 도전 1개
     const exps = [
@@ -108,7 +108,7 @@ const FoehnLab = (function () {
     ch = Challenges(ui.moreBox, L, [
       {
         id: 'predict', title: '산을 넘은 뒤 도착 기온 예상하기',
-        goal: '바람을 보내기 전에 영서 <b>도착 기온</b>을 계산해 입력하고 확정한 뒤, 공기를 도착까지 보내 확인하세요. (±0.5 ℃)',
+        goal: '바람을 보내기 전에 풍하측 <b>도착 기온</b>을 계산해 입력하고 확정한 뒤, 공기를 도착까지 보내 확인하세요. (±0.5 ℃)',
         hints: ['응결 시작 높이와 정상의 기온을 차례로 구해 보세요.',
           '오를 때: 응결 고도까지 −10 ℃/km, 그 위는 −5 ℃/km. 내려올 때: −(높이)만큼 +10 ℃/km.',
           '응결 고도 H(m) = 125 × (T₀ − Td₀). 정상 기온 = T₀ − 10H − 5(M − H), 도착 기온 = 정상 기온 + 10M (H·M은 km, H ≥ M이면 도착 = 출발)'],
@@ -241,17 +241,19 @@ const FoehnLab = (function () {
   /* 산 모양 */
   function geo(f) {
     const W = f.sceneW;
-    const xE = W * 0.8, xFE = W * 0.7, xs = W * 0.45, xFW = W * 0.19, xW = W * 0.04;
-    const w = (xFE - xFW) / 2;
+    // 왼쪽 출발(xS) → 풍상측 기슭(xFU) → 정상(xs) → 풍하측 기슭(xFD) → 오른쪽 도착(xD). 도착점은 오른쪽 끝 높이 표시(약 70px)와 겹치지 않게
+    const xS = W * 0.06 + 14, xD = Math.min(W * 0.86, W - 96), D = xD - xS;
+    const xFU = xS + 0.14 * D, xFD = xD - 0.16 * D, xs = (xFU + xFD) / 2;
+    const w = (xFD - xFU) / 2;
     const zAt = x => (Math.abs(x - xs) >= w ? 0 : st.M * (0.5 + 0.5 * Math.cos(Math.PI * (x - xs) / w)));
-    const xAt = (z, side) => { const d = w * Math.acos(clamp(2 * z / st.M - 1, -1, 1)) / Math.PI; return side === 'up' ? xs + d : xs - d; };
+    const xAt = (z, side) => { const d = w * Math.acos(clamp(2 * z / st.M - 1, -1, 1)) / Math.PI; return side === 'up' ? xs - d : xs + d; };
     const xOfS = s2 => {
       const p = posOf(s2, st.M);
-      if (p.seg === 'east') return lerp(xE, xFE, s2 / SA);
-      if (p.seg === 'west') return lerp(xFW, xW, (s2 - SC) / (1 - SC));
+      if (p.seg === 'flatUp') return lerp(xS, xFU, s2 / SA);
+      if (p.seg === 'flatDown') return lerp(xFD, xD, (s2 - SC) / (1 - SC));
       return xAt(p.z, p.side);
     };
-    return { W, xE, xFE, xs, xFW, xW, w, zAt, xAt, xOfS };
+    return { W, xS, xFU, xs, xFD, xD, w, zAt, xAt, xOfS };
   }
   function buildScene(f) {
     const svg = sh.sceneSvg; clear(svg);
@@ -262,19 +264,18 @@ const FoehnLab = (function () {
     // 바람 방향
     const wy = f.yOf(ZMAX) + 14;
     const arrow = s('g', { opacity: 0.9 }, svg);
-    s('line', { x1: G.W * 0.95, x2: G.W * 0.72, y1: wy, y2: wy, stroke: '#4E5D6A', 'stroke-width': 2.5 }, arrow);
-    s('path', { d: `M${G.W * 0.72 + 10} ${wy - 7} L${G.W * 0.72} ${wy} L${G.W * 0.72 + 10} ${wy + 7}`, fill: 'none', stroke: '#4E5D6A', 'stroke-width': 2.5, 'stroke-linecap': 'round' }, arrow);
-    txt({ x: G.W * 0.70, y: wy + 5, 'text-anchor': 'end', class: 'lb-sm', fill: '#4E5D6A' }, '바람 방향 (동풍)', arrow);
+    const wa = G.W * 0.05, wb = G.W * 0.05 + Math.min(150, G.W * 0.25);
+    s('line', { x1: wa, x2: wb, y1: wy, y2: wy, stroke: '#4E5D6A', 'stroke-width': 2.5 }, arrow);
+    s('path', { d: `M${wb - 10} ${wy - 7} L${wb} ${wy} L${wb - 10} ${wy + 7}`, fill: 'none', stroke: '#4E5D6A', 'stroke-width': 2.5, 'stroke-linecap': 'round' }, arrow);
+    txt({ x: wb + 8, y: wy + 5, class: 'lb-sm', fill: '#4E5D6A' }, '바람 방향', arrow);
     // 산 (한 겹)
-    let front = `M${G.xFW} ${y0}`;
-    for (let x = G.xFW; x <= G.xFE; x += 3) front += ` L${x.toFixed(1)} ${f.yOf(G.zAt(x)).toFixed(1)}`;
-    s('path', { d: front + ` L${G.xFE} ${y0} Z`, fill: '#8FA08B' }, svg);
-    // 땅 · 바다
+    let front = `M${G.xFU} ${y0}`;
+    for (let x = G.xFU; x <= G.xFD; x += 3) front += ` L${x.toFixed(1)} ${f.yOf(G.zAt(x)).toFixed(1)}`;
+    s('path', { d: front + ` L${G.xFD} ${y0} Z`, fill: '#8FA08B' }, svg);
+    // 땅
     s('rect', { x: 0, y: y0, width: G.W, height: f.H - y0, fill: '#B9C6AE' }, svg);
-    s('path', { d: `M${G.W * 0.84} ${y0} L${G.W} ${y0} L${G.W} ${f.H} L${G.W * 0.8} ${f.H} Z`, fill: '#9CC3DD' }, svg);
-    txt({ x: G.W * 0.93, y: y0 + 22, 'text-anchor': 'middle', class: 'lb-sm', fill: '#2E5B78' }, '바다', svg);
-    txt({ x: 12, y: f.H - 14, class: 'lb', fill: '#34402F' }, '서쪽 · 영서', svg);
-    txt({ x: G.W * 0.78, y: f.H - 14, 'text-anchor': 'end', class: 'lb', fill: '#34402F' }, '동쪽 · 영동', svg);
+    txt({ x: 12, y: f.H - 14, class: 'lb', fill: '#34402F' }, '풍상측', svg);
+    txt({ x: G.xD + 10, y: f.H - 14, 'text-anchor': 'end', class: 'lb', fill: '#34402F' }, '풍하측', svg);
     if (f.stacked) for (let z = 0; z <= 3; z++) txt({ x: G.W - 8, y: f.yOf(z) - 5, 'text-anchor': 'end', class: 'tk' }, z + ' km', svg);
     // 응결 고도 · 구름 · 비 · 경로
     E.sLCL = s('line', { stroke: 'var(--lcl)', 'stroke-width': 2.5, 'stroke-dasharray': '12 5 3 5' }, svg);
@@ -297,7 +298,7 @@ const FoehnLab = (function () {
     E.parcel = makeParcel(svg, { seed: 7 });
     sa(E.parcel.g, { tabindex: 0, role: 'slider', 'aria-label': '여정 진행', 'aria-valuemin': 0, 'aria-valuemax': 100 });
     E.parcel.g.addEventListener('keydown', e => {
-      const k = { ArrowRight: -0.01, ArrowLeft: 0.01, ArrowUp: 0.01, ArrowDown: -0.01, PageUp: 0.1, PageDown: -0.1 }[e.key];
+      const k = { ArrowRight: 0.01, ArrowLeft: -0.01, ArrowUp: 0.01, ArrowDown: -0.01, PageUp: 0.1, PageDown: -0.1 }[e.key];
       if (k != null) { e.preventDefault(); pause(); setS(st.s + k); }
     });
     // 장면을 누르면 그 위치로 (경로 위 가장 가까운 지점)
@@ -395,39 +396,39 @@ const FoehnLab = (function () {
     /* 장면 */
     const px = G.xOfS(st.s);
     const showL = (passedLCL || pathVisible()) && fo.H <= ZMAX;
-    sa(E.sLCL, { x1: fo.reachesSat ? G.xAt(fo.H, 'up') : G.xs, x2: G.W, y1: yH, y2: yH, opacity: showL ? 1 : 0 });
-    sa(E.sLCLt, { x: G.W - 78, y: yH - 7, opacity: showL ? 1 : 0 });
+    sa(E.sLCL, { x1: 0, x2: fo.reachesSat ? G.xAt(fo.H, 'up') : G.xs, y1: yH, y2: yH, opacity: showL ? 1 : 0 });
+    sa(E.sLCLt, { x: 8, 'text-anchor': 'start', y: yH - 7, opacity: showL ? 1 : 0 });
     E.sLCLt.textContent = fo.reachesSat ? `응결 고도 ${fZ(fo.H)} km` : `응결 고도 ${fZ(fo.H)} km (정상보다 높음)`;
     // 구름: 풍상측에서 지나온 포화 구간 (진행 위치로만 결정)
-    const zTopUp = pos.side === 'down' ? st.M : (pos.seg === 'east' ? 0 : cur.z);
+    const zTopUp = pos.side === 'down' ? st.M : (pos.seg === 'flatUp' ? 0 : cur.z);
     const ck = fo.precipitates && zTopUp > fo.H + 0.02 ? `${fo.H.toFixed(3)}|${zTopUp.toFixed(3)}` : '';
     if (ck !== E.cloudKey) {
       E.cloudKey = ck; clear(E.cloud); clear(E.rain);
       if (ck) {
         const n = Math.max(2, Math.ceil((zTopUp - fo.H) / 0.12));
         const top = f.yOf(zTopUp) - 40, bot = f.yOf(fo.H) + 4;
-        cloudShape(E.cloud, { x0: G.xs - 40, y0: top, x1: G.W, y1: bot }, c => {
+        cloudShape(E.cloud, { x0: 0, y0: top, x1: G.xs + 40, y1: bot }, c => {
           const R = rng(17);
           for (let i = 0; i <= n; i++) {
             const zz = fo.H + (zTopUp - fo.H) * i / n;
             const x = G.xAt(zz, 'up'), y = f.yOf(zz);
             const r = 15 + 7 * R();
-            c.circle(x + r * 0.6, y - r * 0.55, r); c.circle(x + r * 1.6, y - r * 0.3, r * 0.85);
+            c.circle(x - r * 0.6, y - r * 0.55, r); c.circle(x - r * 1.6, y - r * 0.3, r * 0.85);
           }
         }, 0.92);
         const R2 = rng(5);
         for (let i = 0; i < Math.max(3, n); i++) {
           const zz = fo.H + (zTopUp - fo.H) * (i + 0.5) / Math.max(3, n);
-          const x = G.xAt(zz, 'up') + 18 + R2() * 14, y = f.yOf(zz) + 2;
-          const l = s('line', { x1: x, y1: y, x2: x - 3, y2: y + 13, stroke: '#4F86B5', 'stroke-width': 2.2, 'stroke-linecap': 'round' }, E.rain);
+          const x = G.xAt(zz, 'up') - 18 - R2() * 14, y = f.yOf(zz) + 2;
+          const l = s('line', { x1: x, y1: y, x2: x + 3, y2: y + 13, stroke: '#4F86B5', 'stroke-width': 2.2, 'stroke-linecap': 'round' }, E.rain);
           l.style.animationDelay = (i * 0.11) + 's';
         }
       }
     }
     E.rain.classList.toggle('rain', st.playing && !REDUCED_MOTION);
-    sa(E.rainT, { x: G.W - 8, 'text-anchor': 'end', y: Math.min(f.yOf(0) - 10, f.yOf(fo.H) + 26), opacity: ck ? 1 : 0 });
+    sa(E.rainT, { x: 8, 'text-anchor': 'start', y: Math.min(f.yOf(0) - 10, f.yOf(fo.H) + 26), opacity: ck ? 1 : 0 });
     const dryOn = st.s >= 1 - 1e-9 && fo.precipitates;
-    sa(E.dryT, { x: 10, 'text-anchor': 'start', y: f.yOf(0) - 40, opacity: dryOn ? 1 : 0 });
+    sa(E.dryT, { x: G.W - 8, 'text-anchor': 'end', y: f.yOf(0) - 40, opacity: dryOn ? 1 : 0 });
     E.dryT.textContent = '도착: 더 따뜻하고 건조';
     // 지나온 길: 공기 덩어리 뒤쪽으로 일정 간격의 흐름 화살표 (비탈 바깥으로 조금 띄움, 글자 밑은 건너뜀)
     const rad = 13 + 2 * cur.z;
@@ -507,9 +508,9 @@ const FoehnLab = (function () {
     /* 수치 */
     const rh = Physics.relHumidity(cur.T, cur.Td);
     const stg = atStage(fo);
-    let whereTxt = stg ? STAGE_NAME[stg] : (pos.seg === 'east' ? '영동 평지' : pos.seg === 'west' ? '영서 평지' : pos.side === 'up' ? '풍상측 상승' : '풍하측 하강');
+    let whereTxt = stg ? STAGE_NAME[stg] : (pos.seg === 'flatUp' ? '풍상측 평지' : pos.seg === 'flatDown' ? '풍하측 평지' : pos.side === 'up' ? '풍상측 상승' : '풍하측 하강');
     if (stg === 'lcl' && stg && Math.abs(stagePos(fo).lcl - stagePos(fo).summit) < 1e-9) whereTxt = '정상 · 응결 시작';
-    ui.ro.set('where', `<span style="font-size:22px">${whereTxt}</span>`, st.s >= 1 - 1e-9 ? '영서 도착' : (pos.side === 'up' ? '동쪽 → 산 위' : '산 위 → 서쪽'));
+    ui.ro.set('where', `<span style="font-size:22px">${whereTxt}</span>`, st.s >= 1 - 1e-9 ? '풍하측 도착' : (pos.side === 'up' ? '풍상측 → 산 위' : '산 위 → 풍하측'));
     let cmpT = '', cmpD = '';
     if (st.cmp && stg) {
       const fc = Physics.foehn(st.cmp.T0, st.cmp.Td0, st.cmp.M);
@@ -535,19 +536,19 @@ const FoehnLab = (function () {
   function renderGuide(fo, cur, pos, stg) {
     if (st.notice) { ui.ro.guide('안내', 'neutral', st.notice); return; }
     let state = cur.saturated ? '포화' : '불포화', cls = cur.saturated ? 'sat' : 'unsat', msg;
-    if (st.s <= 1e-9) msg = fo.start.saturated ? '출발부터 기온과 이슬점이 같은 포화 공기예요. 산을 오르는 내내 응결해 비가 내려요.' : `영동에서 출발해요. 기온 ${fT(fo.start.T)} ℃, 이슬점 ${fT(fo.start.Td)} ℃. <b>▶ 재생</b>으로 산을 넘겨 보세요.`;
+    if (st.s <= 1e-9) msg = fo.start.saturated ? '출발부터 기온과 이슬점이 같은 포화 공기예요. 산을 오르는 내내 응결해 비가 내려요.' : `풍상측에서 출발해요. 기온 ${fT(fo.start.T)} ℃, 이슬점 ${fT(fo.start.Td)} ℃. <b>▶ 재생</b>으로 산을 넘겨 보세요.`;
     else if (st.s >= 1 - 1e-9) {
       state = '도착'; cls = 'neutral';
       msg = fo.precipitates
         ? `출발보다 기온은 <b>${fT(fo.dT)} ℃ 높고</b> 이슬점은 <b>${fT(-fo.dTd)} ℃ 낮아요</b> → 강수로 수분을 잃어 <b>고온 건조</b>해졌어요.`
         : (fo.reachesSat ? '정상에서 막 포화되었지만 비로 잃은 수분이 없어, 도착 기온·이슬점이 출발과 같아요.' : '응결이 일어나지 않아 내려오며 변화를 그대로 되돌렸어요. 도착 기온·이슬점이 출발과 같아요.');
-    } else if (pos.seg === 'east') msg = '산기슭으로 이동하는 중이에요. 높이가 그대로라 기온과 이슬점도 그대로예요.';
+    } else if (pos.seg === 'flatUp') msg = '산기슭으로 이동하는 중이에요. 높이가 그대로라 기온과 이슬점도 그대로예요.';
     else if (pos.side === 'up') {
       if (stg === 'summit') msg = fo.reachesSat ? (fo.precipitates ? '정상: 기온과 이슬점이 같아요(포화). 여기서부터 내려가요.' : '정상에서 기온과 이슬점이 처음 같아졌어요(포화). 포화 상태로 오른 구간은 없어요.') : noLclText(fo);
       else if (Math.abs(cur.z - fo.H) < 1e-9) msg = '기온과 이슬점이 같아져 <b>응결이 시작</b>돼요. 구름이 생기기 시작해요.';
       else if (cur.saturated) msg = '구름 속에서 응결해 <b>비가 내려요</b>. 기온과 이슬점이 함께 5 ℃/km씩 낮아져요.';
       else msg = '불포화 상태로 오르며 기온은 10 ℃/km, 이슬점은 2 ℃/km씩 낮아져요.';
-    } else if (pos.seg === 'west') msg = '영서 평지로 이동하는 중이에요.';
+    } else if (pos.seg === 'flatDown') msg = '풍하측 평지로 이동하는 중이에요.';
     else msg = '내려가며 기온은 <b>10 ℃/km</b>, 이슬점은 <b>2 ℃/km</b>씩 높아져요. 기온이 더 빨리 올라 <b>상대 습도가 낮아져요</b>.';
     ui.ro.guide(state, cls, msg);
   }

@@ -50,13 +50,13 @@ console.log('[축 범위가 필요한 값]');
   ok(near(P.envTemp(P.makeProfile(10, 12), 5), -50), '지표 10 ℃·감률 12에서 5 km 주위 기온 −50 ℃');
 }
 
-console.log('[높새바람] 20 ℃ · 12 ℃ · 산 2 km');
+console.log('[푄 현상] 20 ℃ · 12 ℃ · 산 2 km');
 {
   const f = P.foehn(20, 12, 2);
   ok(f.reachesSat && f.precipitates, '포화 도달, 강수 있음');
   ok(near(f.lclPoint.z, 1) && near(f.lclPoint.T, 10) && near(f.lclPoint.Td, 10), '응결 시작 1 km · 10 ℃ · 10 ℃', f.lclPoint);
   ok(near(f.summit.T, 5) && near(f.summit.Td, 5) && f.summit.saturated, '정상 2 km · 5 ℃ · 5 ℃ (포화)', f.summit);
-  ok(near(f.arrival.T, 25) && near(f.arrival.Td, 9), '영서 도착 25 ℃ · 9 ℃', f.arrival);
+  ok(near(f.arrival.T, 25) && near(f.arrival.Td, 9), '풍하측 도착 25 ℃ · 9 ℃', f.arrival);
   ok(near(f.dT, 5) && near(f.dTd, -3), '기온 +5 ℃, 이슬점 −3 ℃');
   const top = P.foehnAt(f, 'down', 2), justDown = P.foehnAt(f, 'down', 1.999);
   ok(top.saturated, '정상에서 기온 = 이슬점 → 포화');
@@ -68,7 +68,7 @@ console.log('[높새바람] 20 ℃ · 12 ℃ · 산 2 km');
   ok(up15.precipitating && up15.saturated, '풍상측 포화 상승 구간에서 강수');
 }
 
-console.log('[높새바람] 산 높이 = 응결 고도 (1 km)');
+console.log('[푄 현상] 산 높이 = 응결 고도 (1 km)');
 {
   const f = P.foehn(20, 12, 1);
   ok(f.reachesSat && !f.precipitates, '정상에서 처음 포화, 강수 구간 길이 0');
@@ -77,7 +77,7 @@ console.log('[높새바람] 산 높이 = 응결 고도 (1 km)');
   ok(!P.foehnAt(f, 'up', 1).precipitating, '정상에서도 강수 없음');
 }
 
-console.log('[높새바람] 산 0.5 km — 응결 고도에 못 미침');
+console.log('[푄 현상] 산 0.5 km — 응결 고도에 못 미침');
 {
   const f = P.foehn(20, 12, 0.5);
   ok(!f.reachesSat && !f.precipitates && f.lclPoint === null, '전체 경로 불포화');
@@ -85,7 +85,7 @@ console.log('[높새바람] 산 0.5 km — 응결 고도에 못 미침');
   ok(near(f.arrival.T, 20) && near(f.arrival.Td, 12), '도착 = 출발 (20 ℃ · 12 ℃)', f.arrival);
 }
 
-console.log('[높새바람] 처음부터 포화 (15 ℃ · 15 ℃, 산 2 km)');
+console.log('[푄 현상] 처음부터 포화 (15 ℃ · 15 ℃, 산 2 km)');
 {
   const f = P.foehn(15, 15, 2);
   ok(f.start.saturated && near(f.lclPoint.z, 0), '출발부터 포화, 응결 시작 0 km');

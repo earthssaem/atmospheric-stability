@@ -67,7 +67,7 @@ const ok = (c, label, detail) => { if (c) { pass++; console.log('  ✓ ' + label
     ok(td === 10, '기온을 이슬점보다 낮추면 이슬점도 기온에 맞춰짐', td);
   }
 
-  console.log('[높새바람]');
+  console.log('[푄 현상]');
   {
     await page.click('#tab-btn-foehn'); await page.waitForTimeout(200);
     const go = k => ev(`App.TABS.foehn.api.goStage('${k}')`);
@@ -78,7 +78,7 @@ const ok = (c, label, detail) => { if (c) { pass++; console.log('  ✓ ' + label
     await ev('App.TABS.foehn.api.setS(0.5 + 1e-4)'); r = await ro('foehn');
     ok(/불포화/.test(r.guide) || r[4] !== '100%', '하강을 시작하면 불포화', r);
     await go('arrive'); r = await ro('foehn');
-    ok(r[1] === '0.00km' && r[2] === '25.0℃' && r[3] === '9.0℃', '영서 도착 25 ℃ · 9 ℃', r);
+    ok(r[1] === '0.00km' && r[2] === '25.0℃' && r[3] === '9.0℃', '풍하측 도착 25 ℃ · 9 ℃', r);
     ok(/5\.0 ℃ 높고/.test(r.guide) && /3\.0 ℃ 낮아요/.test(r.guide), '출발 대비 기온 +5, 이슬점 −3 설명', r.guide);
     // 되감기와 같은 위치 재접근
     const snap = () => ev(() => [document.querySelector('#lab-foehn .readouts').textContent, document.querySelector('#lab-foehn .scene-pane svg').innerHTML.length]);
