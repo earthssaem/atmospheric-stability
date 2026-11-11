@@ -42,7 +42,7 @@ function layoutShell(sh) {
   const fit = !stacked && window.innerWidth >= 900 && window.innerHeight >= 520;
   if (fit) {
     const svgTop = sh.sceneSvg.getBoundingClientRect().top + window.scrollY;
-    const below = sh.ctrl.getBoundingClientRect().bottom - sh.panel.getBoundingClientRect().bottom;
+    const below = (sh.bottomEl || sh.ctrl).getBoundingClientRect().bottom - sh.panel.getBoundingClientRect().bottom;
     H = window.innerHeight - svgTop - below - 1 - 10;
     H = clamp(H, 270, 760);
   } else if (!stacked) {

@@ -154,8 +154,18 @@ svg text { font-family: var(--font); }
 .rain line { animation: fall .7s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .rain line { animation: none; } }
 
+/* 대기 안정도: 공기 덩어리 조작 줄 · 상태 표시 */
+.manip-bar { margin-top: 8px; padding: 6px 10px; background: #fff; border: 1px solid var(--line); border-radius: 12px; gap: 8px 12px; }
+.manip-title { font-size: 14px; font-weight: 800; color: var(--muted); }
+.manip-sep { width: 1px; align-self: stretch; background: var(--line); margin: 4px 2px; }
+.rel-hint { flex: 1 1 260px; max-width: 420px; font-size: 14px; color: var(--ink-2); visibility: hidden; line-height: 1.35; word-break: keep-all; }
+@media (max-width: 700px) { .manip-sep { display: none; } }
+.rel-hint.show { visibility: visible; }
+.manip-ring { transition: opacity .35s ease; pointer-events: none; }
+.manip-status { font-size: 14px; font-weight: 600; fill: #3B5266; }
+@media (prefers-reduced-motion: reduce) { .manip-ring { transition: none; } }
+
 /* 안정도 배지 · 역전층 입력 */
-.hold-btn { margin-left: auto; min-height: 36px !important; font-size: 13.5px !important; padding: 0 10px !important; }
 .stab-badge { margin-left: 8px; font-size: 14px; font-weight: 800; padding: 3px 10px; border-radius: 99px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stab-badge.absolute-stable { background: #E1ECF5; color: #1F5A88; }
 .stab-badge.moist-neutral, .stab-badge.dry-neutral { background: #EFEDE6; color: #4E5D6A; }
