@@ -3,451 +3,105 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>대기 안정도와 강수 시뮬레이터</title>
-<style>
-  :root {
-    --sky-bg: #eaf6ff;
-    --panel-bg: #ffffff;
-    --ink: #14304a;
-    --ink-soft: #3d5a76;
-    --accent: #1668b3;
-    --hot: #d62828;
-    --cold: #1d6fd8;
-    --gold: #f5a800;
-    --ok: #1a9e57;
-    --warn: #c9500e;
-    --radius: 14px;
-    --shadow: 0 3px 10px rgba(20, 48, 74, 0.12);
-  }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; }
-  body {
-    font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', -apple-system, sans-serif;
-    background: linear-gradient(#d6efff, #eaf6ff 40%);
-    color: var(--ink);
-    font-size: 19px;
-    line-height: 1.45;
-    min-height: 100vh;
-  }
-  button { font-family: inherit; cursor: pointer; }
-  input { font-family: inherit; }
-
-  /* ───────── 헤더 ───────── */
-  header {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 12px 22px;
-    padding: 12px 24px;
-    background: rgba(255,255,255,0.88);
-    border-bottom: 3px solid #bcdcf5;
-    position: sticky; top: 0; z-index: 40;
-    backdrop-filter: blur(4px);
-  }
-  header h1 { font-size: 26px; margin: 0; letter-spacing: -0.5px; white-space: nowrap; }
-  nav.tabs { display: flex; gap: 8px; flex-wrap: wrap; }
-  nav.tabs button {
-    font-size: 21px; font-weight: 700; padding: 10px 20px;
-    border: 3px solid #9fc9ea; border-radius: 12px;
-    background: #f2f9ff; color: var(--ink-soft);
-    transition: all .15s;
-  }
-  nav.tabs button.active {
-    background: var(--accent); border-color: var(--accent); color: #fff;
-    box-shadow: var(--shadow);
-  }
-  .star-tracker {
-    margin-left: auto; display: flex; align-items: center; gap: 14px;
-    font-size: 20px; font-weight: 700;
-  }
-  .star-group { display: flex; align-items: center; gap: 2px; padding: 4px 10px; background: #fff8e2; border: 2px solid #f2d98c; border-radius: 10px; }
-  .star-group .g-icon { margin-right: 4px; font-size: 18px; }
-  .star-slot { font-size: 20px; filter: grayscale(1) opacity(.35); transition: all .3s; }
-  .star-slot.earned { filter: none; transform: scale(1.05); }
-  .star-total { color: var(--gold); font-size: 22px; }
-  #reset-stars { border: none; background: transparent; font-size: 18px; opacity: .55; }
-  #reset-stars:hover { opacity: 1; }
-
-  main { max-width: 1500px; margin: 0 auto; padding: 16px 24px 60px; }
-  .tab-panel { display: none; }
-  .tab-panel.active { display: block; }
-
-  /* ───────── 모드 토글 + 미션 패널 ───────── */
-  .mode-row { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
-  .mode-toggle { display: inline-flex; border: 3px solid var(--accent); border-radius: 12px; overflow: hidden; flex: none; }
-  .mode-toggle button {
-    font-size: 20px; font-weight: 700; padding: 10px 22px; border: none;
-    background: #fff; color: var(--accent);
-  }
-  .mode-toggle button.active { background: var(--accent); color: #fff; }
-
-  .mission-panel {
-    flex: 1 1 480px; background: #fffdf3; border: 3px solid #f0d98a; border-radius: var(--radius);
-    padding: 12px 18px; box-shadow: var(--shadow); display: none;
-  }
-  .mission-panel.visible { display: block; }
-  .mission-steps { display: flex; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
-  .mission-step {
-    font-size: 17px; font-weight: 700; padding: 4px 12px; border-radius: 20px;
-    background: #eee; color: #999; border: 2px solid #ddd;
-  }
-  .mission-step.current { background: #fff3c4; color: #8a6400; border-color: var(--gold); }
-  .mission-step.done { background: #e3f7ec; color: var(--ok); border-color: var(--ok); }
-  .mission-title { font-size: 22px; font-weight: 800; margin: 2px 0 4px; }
-  .mission-desc { font-size: 18px; color: var(--ink-soft); }
-  .mission-extra { margin-top: 8px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .mission-extra input[type=number] {
-    font-size: 22px; font-weight: 700; width: 120px; padding: 6px 10px;
-    border: 3px solid var(--accent); border-radius: 10px; text-align: center;
-  }
-  .mission-hint {
-    margin-top: 8px; font-size: 17px; color: var(--warn); background: #fff1e6;
-    border-radius: 8px; padding: 6px 12px; display: none;
-  }
-  .mission-hint.visible { display: block; }
-  .hint-btn {
-    font-size: 16px; padding: 4px 12px; border-radius: 8px; border: 2px solid #d8c26a;
-    background: #fffbe8; color: #8a6400; font-weight: 700;
-  }
-  .mission-complete-msg { font-size: 20px; font-weight: 800; color: var(--ok); }
-
-  /* ───────── 조작 패널 ───────── */
-  .controls {
-    display: flex; flex-wrap: wrap; gap: 14px 26px; align-items: center;
-    background: var(--panel-bg); border-radius: var(--radius); box-shadow: var(--shadow);
-    padding: 14px 20px; margin-bottom: 14px;
-  }
-  .ctrl { display: flex; align-items: center; gap: 10px; }
-  .ctrl label { font-size: 19px; font-weight: 700; white-space: nowrap; }
-  .ctrl input[type=range] { width: 190px; height: 34px; accent-color: var(--accent); }
-  .ctrl .val {
-    font-size: 26px; font-weight: 800; min-width: 88px; text-align: right;
-    font-variant-numeric: tabular-nums;
-  }
-  .btn {
-    font-size: 20px; font-weight: 700; padding: 10px 20px; border-radius: 12px;
-    border: none; background: var(--accent); color: #fff; box-shadow: var(--shadow);
-    transition: transform .1s;
-  }
-  .btn:active { transform: scale(.96); }
-  .btn.secondary { background: #e7f1fa; color: var(--accent); border: 2px solid var(--accent); }
-  .btn.big { font-size: 22px; padding: 12px 26px; }
-  .btn.hold { background: #c9500e; }
-  .btn:disabled { opacity: .45; cursor: not-allowed; }
-  .updown { display: flex; flex-direction: column; gap: 4px; }
-  .updown button {
-    font-size: 20px; font-weight: 800; width: 52px; padding: 4px 0;
-    border-radius: 8px; border: 2px solid var(--accent); background: #eef6fd; color: var(--accent);
-  }
-  .preset-row { display: flex; gap: 8px; flex-wrap: wrap; }
-  .preset-row button {
-    font-size: 17px; font-weight: 700; padding: 8px 14px; border-radius: 10px;
-    border: 2px solid #9fc9ea; background: #f2f9ff; color: var(--ink-soft);
-  }
-  .preset-row button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-
-  /* ───────── 무대 (장면 + 그래프) ───────── */
-  .stage { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: stretch; }
-  .stage.wide-scene { grid-template-columns: 1.6fr 1fr; }
-  @media (max-width: 980px) { .stage, .stage.wide-scene { grid-template-columns: 1fr; } }
-  .scene-box, .graph-box {
-    background: var(--panel-bg); border-radius: var(--radius); box-shadow: var(--shadow);
-    padding: 8px; position: relative; overflow: hidden;
-  }
-  .scene-box svg, .graph-box svg { width: 100%; height: auto; display: block; }
-  .box-title {
-    position: absolute; top: 10px; left: 16px; font-size: 17px; font-weight: 800;
-    color: var(--ink-soft); background: rgba(255,255,255,.8); padding: 2px 10px;
-    border-radius: 8px; z-index: 5; pointer-events: none;
-  }
-
-  /* SVG 공통 텍스트 */
-  text { font-family: inherit; }
-  .tick-label { font-size: 15px; fill: var(--ink-soft); font-weight: 600; }
-  .axis-label { font-size: 16px; fill: var(--ink); font-weight: 800; }
-  .big-num { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
-  .badge-text { font-size: 17px; font-weight: 800; }
-  .seg-label { font-size: 15px; font-weight: 700; fill: #38536d; }
-  .lcl-label { font-size: 16px; font-weight: 800; fill: #8a6400; }
-
-  /* 탭2 비교 카드 */
-  .compare-card {
-    margin-top: 12px; background: #f0fbf4; border: 3px solid #9adcb4; border-radius: var(--radius);
-    padding: 12px 20px; font-size: 21px; font-weight: 700; display: none; box-shadow: var(--shadow);
-  }
-  .compare-card.visible { display: block; }
-  .compare-card .headline { font-size: 24px; font-weight: 800; }
-  .nofoehn-note {
-    margin-top: 12px; background: #fff4e4; border: 3px solid #f3bf84; border-radius: var(--radius);
-    padding: 12px 20px; font-size: 20px; font-weight: 700; display: none;
-  }
-  .nofoehn-note.visible { display: block; }
-
-  /* 탭3 판정 배지 */
-  .stab-badge {
-    font-size: 21px; font-weight: 800; padding: 8px 18px; border-radius: 12px; border: 3px solid;
-  }
-  .stab-badge.stable { background: #e5f2ff; color: #10508f; border-color: #7db4e2; }
-  .stab-badge.conditional { background: #fff4dd; color: #92600a; border-color: #ecc06a; }
-  .stab-badge.unstable { background: #ffe8e4; color: #ab2413; border-color: #ef9a8c; }
-
-  /* 개념 정리 */
-  details.concept {
-    margin-top: 16px; background: #f4faff; border: 2px solid #bcdcf5;
-    border-radius: var(--radius); padding: 10px 20px;
-  }
-  details.concept summary { font-size: 20px; font-weight: 800; cursor: pointer; color: var(--accent); }
-  details.concept ul { margin: 10px 0 4px; font-size: 18px; }
-  details.concept li { margin-bottom: 6px; }
-
-  /* ───────── 축하 / 수료증 오버레이 ───────── */
-  #celebrate-overlay, #cert-overlay {
-    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
-    z-index: 100;
-  }
-  #celebrate-overlay.visible, #cert-overlay.visible { display: flex; }
-  #celebrate-overlay { pointer-events: none; }
-  .celebrate-card {
-    background: rgba(255,255,255,.96); border: 4px solid var(--gold); border-radius: 22px;
-    padding: 30px 60px; text-align: center; box-shadow: 0 8px 40px rgba(0,0,0,.25);
-    animation: pop .45s cubic-bezier(.2,1.6,.4,1);
-  }
-  .celebrate-card .big-star { font-size: 76px; animation: spin-star 1.2s ease; display: inline-block; }
-  .celebrate-card .msg { font-size: 28px; font-weight: 800; margin-top: 6px; }
-  @keyframes pop { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-  @keyframes spin-star { from { transform: scale(.2) rotate(-360deg); } to { transform: scale(1) rotate(0); } }
-
-  #cert-overlay { background: rgba(10, 30, 55, .55); }
-  .cert-card {
-    background: linear-gradient(#fffef6, #fff7dd); border: 6px double var(--gold);
-    border-radius: 24px; padding: 40px 70px; text-align: center; max-width: 640px;
-    box-shadow: 0 10px 60px rgba(0,0,0,.4); animation: pop .5s cubic-bezier(.2,1.6,.4,1);
-  }
-  .cert-card h2 { font-size: 40px; margin: 8px 0; }
-  .cert-card .cert-stars { font-size: 34px; letter-spacing: 4px; margin: 10px 0; }
-  .cert-card p { font-size: 21px; }
-  .confetti { position: fixed; top: -40px; font-size: 30px; animation: fall linear forwards; z-index: 101; pointer-events: none; }
-  @keyframes fall { to { transform: translateY(110vh) rotate(720deg); } }
-
-  /* 구름/비 애니메이션 */
-  .cloud-shape { transition: opacity .6s; }
-  @keyframes rain-fall { from { transform: translateY(0); opacity: 1; } to { transform: translateY(46px); opacity: 0; } }
-  .rain-drop { animation: rain-fall 0.9s linear infinite; }
-  .balloon-grp { cursor: grab; }
-  .balloon-grp:active { cursor: grabbing; }
-  @keyframes float-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
-</style>
+<title>대기 안정도와 강수 — 시뮬레이션 실험실</title>
+<meta name="description" content="단열 변화, 푄 현상, 대기 안정도, 단열선도 탐구, 안개와 강수 과정을 시뮬레이션으로 탐구하는 지구과학 수업용 웹앱">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230d7489'/%3E%3Cpath d='M10 20a5 5 0 1 1 1.6-9.7A6 6 0 0 1 23 12a4 4 0 0 1-1 8z' fill='white'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<header>
-  <h1>🌦️ 대기 안정도와 강수</h1>
-  <nav class="tabs">
-    <button id="tabbtn-tab1" class="active">🎈 상승 실험실</button>
-    <button id="tabbtn-tab2">⛰️ 산 넘기</button>
-    <button id="tabbtn-tab3">⚖️ 안정도 실험실</button>
-  </nav>
-  <div class="star-tracker">
-    <span class="star-group" id="stars-tab1"><span class="g-icon">🎈</span></span>
-    <span class="star-group" id="stars-tab2"><span class="g-icon">⛰️</span></span>
-    <span class="star-group" id="stars-tab3"><span class="g-icon">⚖️</span></span>
-    <span class="star-total" id="star-total">0 / 9</span>
-    <button id="reset-stars" title="별 초기화 (새 수업 시작)">🔄</button>
+<header class="app-header">
+  <div class="header-inner">
+    <a class="brand" id="homeLink" href="#" title="처음 화면으로" aria-label="대기 안정도와 강수 — 처음 화면으로">
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 32 32" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 19a5 5 0 1 1 1.4-9.8A6.5 6.5 0 0 1 23 11a4 4 0 0 1-.5 8z" fill="#fff" fill-opacity=".18"/>
+          <path d="M11 23l-1 3M16 23l-1 3M21 23l-1 3"/>
+        </svg>
+      </span>
+      <span class="brand-text">
+        <h1>대기 안정도와 강수</h1>
+        <p>단열 변화부터 안개·강수 과정까지 · 시뮬레이션 실험실</p>
+      </span>
+    </a>
+    <div class="progress">
+      <div class="progress-chip" title="미션으로 모은 별">
+        <span class="star">⭐</span>
+        <span class="num" id="star-total">0 / 18</span>
+        <span class="progress-bar"><span id="star-bar"></span></span>
+      </div>
+      <button class="icon-btn" id="reset-stars" title="별 초기화 (새 수업 시작)" aria-label="별 초기화">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+      </button>
+    </div>
   </div>
+  <nav class="tabbar" role="tablist" aria-label="실험실 선택">
+    <button class="tab" role="tab" id="tabbtn-tab1" aria-controls="tab1" aria-selected="true">
+      <span class="tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="15" r="6"/><path d="M12 9V2M9 5l3-3 3 3"/></svg></span>
+      <span class="tab-num">1</span>단열 변화<span class="tab-stars" data-tab="tab1"></span>
+    </button>
+    <button class="tab" role="tab" id="tabbtn-tab2" aria-controls="tab2" aria-selected="false">
+      <span class="tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 21l7-11 4 6 3-4 6 9z"/><path d="M13 4h8M16 7.5h5"/></svg></span>
+      <span class="tab-num">2</span>푄 현상<span class="tab-stars" data-tab="tab2"></span>
+    </button>
+    <button class="tab" role="tab" id="tabbtn-tab3" aria-controls="tab3" aria-selected="false">
+      <span class="tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M7 21h10M4 7h16"/><path d="M4 7l-2.5 6a2.8 2.8 0 0 0 5 0zM20 7l-2.5 6a2.8 2.8 0 0 0 5 0z"/></svg></span>
+      <span class="tab-num">3</span>대기 안정도<span class="tab-stars" data-tab="tab3"></span>
+    </button>
+    <button class="tab" role="tab" id="tabbtn-tab4" aria-controls="tab4" aria-selected="false">
+      <span class="tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M8 17l3-6-2-4M13 17l3-8"/></svg></span>
+      <span class="tab-num">4</span>단열선도 탐구<span class="tab-stars" data-tab="tab4"></span>
+    </button>
+    <button class="tab" role="tab" id="tabbtn-tab5" aria-controls="tab5" aria-selected="false">
+      <span class="tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14M3 12h18M5 16h14M8 20h8M9 4h6"/></svg></span>
+      <span class="tab-num">5</span>안개<span class="tab-stars" data-tab="tab5"></span>
+    </button>
+    <button class="tab" role="tab" id="tabbtn-tab6" aria-controls="tab6" aria-selected="false">
+      <span class="tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 15a4 4 0 1 1 .9-7.9A5.5 5.5 0 0 1 18 9a3 3 0 0 1-.5 6z"/><path d="M8 18.5l-1 2.5M12.5 18.5l-1 2.5M17 18.5l-1 2.5"/></svg></span>
+      <span class="tab-num">6</span>강수 과정<span class="tab-stars" data-tab="tab6"></span>
+    </button>
+  </nav>
 </header>
 
-<main>
-
-  <!-- ═══════════════ 탭 1: 상승 실험실 ═══════════════ -->
-  <section class="tab-panel active" id="tab1">
-    <div class="mode-row">
-      <div class="mode-toggle" id="mode-tab1">
-        <button data-mode="free" class="active">자유 모드</button>
-        <button data-mode="mission">미션 모드</button>
-      </div>
-      <div class="mission-panel" id="mission-panel-tab1"></div>
-    </div>
-
-    <div class="controls">
-      <div class="ctrl">
-        <label for="t1-T">지표 기온 T</label>
-        <input type="range" id="t1-T" min="10" max="40" step="1" value="25">
-        <span class="val" id="t1-T-val"></span>
-      </div>
-      <div class="ctrl">
-        <label for="t1-Td">지표 이슬점 Td</label>
-        <input type="range" id="t1-Td" min="0" max="24" step="1" value="15">
-        <span class="val" id="t1-Td-val"></span>
-      </div>
-      <div class="ctrl">
-        <label>풍선 높이</label>
-        <div class="updown">
-          <button id="t1-up" title="0.1 km 상승">▲</button>
-          <button id="t1-down" title="0.1 km 하강">▼</button>
-        </div>
-        <span class="val" id="t1-h-val"></span>
-      </div>
-      <span style="font-size:16px;color:var(--ink-soft)">💡 풍선을 마우스로 직접 끌어올릴 수도 있어요</span>
-    </div>
-
-    <div class="stage">
-      <div class="scene-box">
-        <span class="box-title">하늘 장면</span>
-        <svg id="t1-scene" viewBox="0 0 460 620" aria-label="상승 실험실 하늘 장면"></svg>
-      </div>
-      <div class="graph-box">
-        <span class="box-title">높이–온도 그래프</span>
-        <svg id="t1-graph" viewBox="0 0 460 620" aria-label="높이-온도 그래프"></svg>
-      </div>
-    </div>
-
-    <details class="concept">
-      <summary>📖 개념 정리 — 단열 변화와 상승 응결 고도</summary>
-      <ul>
-        <li>공기 덩어리가 상승하면 주위 기압이 낮아져 <b>팽창</b>하고, 외부와 열 교환 없이 온도가 내려간다 (<b>단열 냉각</b>).</li>
-        <li><b>불포화</b> 공기: 기온은 <b>10 ℃/km</b>(건조 단열 감률), 이슬점은 <b>2 ℃/km</b>씩 하강한다.</li>
-        <li>기온과 이슬점이 같아지는 높이가 <b>상승 응결 고도 H = ⅛(T − Td)</b>. 이 높이부터 수증기가 응결해 구름이 생긴다.</li>
-        <li><b>포화</b> 후에는 응결 시 숨은열(잠열)이 방출되어 <b>5 ℃/km</b>(습윤 단열 감률)로 천천히 식는다.</li>
-      </ul>
-    </details>
-  </section>
-
-  <!-- ═══════════════ 탭 2: 산 넘기 ═══════════════ -->
-  <section class="tab-panel" id="tab2">
-    <div class="mode-row">
-      <div class="mode-toggle" id="mode-tab2">
-        <button data-mode="free" class="active">자유 모드</button>
-        <button data-mode="mission">미션 모드</button>
-      </div>
-      <div class="mission-panel" id="mission-panel-tab2"></div>
-    </div>
-
-    <div class="controls">
-      <div class="ctrl">
-        <label for="t2-T">출발 기온</label>
-        <input type="range" id="t2-T" min="5" max="35" step="1" value="20">
-        <span class="val" id="t2-T-val"></span>
-      </div>
-      <div class="ctrl">
-        <label for="t2-Td">출발 이슬점</label>
-        <input type="range" id="t2-Td" min="0" max="19" step="1" value="14">
-        <span class="val" id="t2-Td-val"></span>
-      </div>
-      <div class="ctrl">
-        <label for="t2-M">산 높이</label>
-        <input type="range" id="t2-M" min="1" max="4" step="0.5" value="2">
-        <span class="val" id="t2-M-val"></span>
-      </div>
-      <button class="btn big" id="t2-go">🌬️ 출발</button>
-      <div class="ctrl" style="flex:1;min-width:260px">
-        <label for="t2-progress">여정</label>
-        <input type="range" id="t2-progress" min="0" max="1000" step="1" value="0" style="width:100%">
-      </div>
-    </div>
-
-    <div class="stage wide-scene">
-      <div class="scene-box">
-        <span class="box-title">산 단면도 (왼쪽 = 서쪽·영서 / 오른쪽 = 동쪽·영동)</span>
-        <svg id="t2-scene" viewBox="0 0 920 520" aria-label="푄 현상 산 단면도"></svg>
-      </div>
-      <div class="graph-box">
-        <span class="box-title">높이–온도 그래프</span>
-        <svg id="t2-graph" viewBox="0 0 460 520" aria-label="푄 높이-온도 그래프"></svg>
-      </div>
-    </div>
-
-    <div class="compare-card" id="t2-compare"></div>
-    <div class="nofoehn-note" id="t2-nofoehn">⚠️ 산 높이가 응결 고도에 못 미쳐 <b>푄이 일어나지 않았어요!</b> 구름도 비도 없이 넘어가면 도착 온도는 출발 온도와 같아요. 이슬점을 높이거나 산을 높여 볼까요?</div>
-
-    <details class="concept">
-      <summary>📖 개념 정리 — 푄 현상과 높새바람</summary>
-      <ul>
-        <li>공기가 산을 <b>강제 상승</b>하면 응결 고도부터 구름이 생기고 <b>비</b>가 내려 수증기를 잃는다.</li>
-        <li>풍상측: 응결 고도까지 10 ℃/km, 그 위는 5 ℃/km로 냉각. 풍하측: 곧바로 불포화가 되어 <b>10 ℃/km로 승온</b>.</li>
-        <li>그 결과 산을 넘은 공기는 처음보다 <b>고온 건조</b>해진다 — 이것이 <b>푄 현상</b>.</li>
-        <li>늦봄~초여름 오호츠크해 기단의 <b>동풍(북동풍)</b>이 태백산맥을 넘으면 영서 지방에 고온 건조한 <b>높새바람</b>이 분다.</li>
-      </ul>
-    </details>
-  </section>
-
-  <!-- ═══════════════ 탭 3: 안정도 실험실 ═══════════════ -->
-  <section class="tab-panel" id="tab3">
-    <div class="mode-row">
-      <div class="mode-toggle" id="mode-tab3">
-        <button data-mode="free" class="active">자유 모드</button>
-        <button data-mode="mission">미션 모드</button>
-      </div>
-      <div class="mission-panel" id="mission-panel-tab3"></div>
-    </div>
-
-    <div class="controls">
-      <div class="ctrl">
-        <label for="t3-gamma">환경 기온 감률 γ</label>
-        <input type="range" id="t3-gamma" min="3" max="12" step="0.5" value="8">
-        <span class="val" id="t3-gamma-val"></span>
-      </div>
-      <div class="preset-row" id="t3-presets">
-        <button data-g="4">절대 안정 (4 ℃/km)</button>
-        <button data-g="8">조건부 불안정 (8 ℃/km)</button>
-        <button data-g="12">절대 불안정 (12 ℃/km)</button>
-      </div>
-      <div class="ctrl">
-        <label for="t3-T">지표 기온</label>
-        <input type="range" id="t3-T" min="10" max="40" step="1" value="30">
-        <span class="val" id="t3-T-val"></span>
-      </div>
-      <div class="ctrl">
-        <label for="t3-Td">지표 이슬점</label>
-        <input type="range" id="t3-Td" min="0" max="29" step="1" value="22">
-        <span class="val" id="t3-Td-val"></span>
-      </div>
-      <button class="btn big" id="t3-poke">👉 쿡 찔러보기</button>
-      <button class="btn big hold" id="t3-force">✊ 강제 상승 (꾹 누르기)</button>
-      <button class="btn secondary" id="t3-reset">↺ 초기화</button>
-      <span class="stab-badge" id="t3-stab-badge"></span>
-    </div>
-
-    <div class="stage">
-      <div class="scene-box">
-        <span class="box-title">하늘 장면</span>
-        <svg id="t3-scene" viewBox="0 0 460 620" aria-label="안정도 실험실 하늘 장면"></svg>
-      </div>
-      <div class="graph-box">
-        <span class="box-title">높이–온도 그래프</span>
-        <svg id="t3-graph" viewBox="0 0 460 620" aria-label="안정도 그래프"></svg>
-      </div>
-    </div>
-
-    <details class="concept">
-      <summary>📖 개념 정리 — 대기 안정도</summary>
-      <ul>
-        <li>주위 대기의 <b>기온 감률 γ</b>를 단열 감률(건조 10, 습윤 5 ℃/km)과 비교해 안정도를 판별한다.</li>
-        <li><b>γ &lt; 5</b>: 절대 안정 → 밀어 올려도 주위보다 차가워 <b>원위치로 복귀</b>. 강제 상승으로 응결하면 옆으로 퍼지는 <b>층운형</b> 구름.</li>
-        <li><b>γ &gt; 10</b>: 절대 불안정 → 조금만 올라가도 주위보다 따뜻해 <b>스스로 상승</b>. 수직으로 발달하는 <b>적운형</b> 구름.</li>
-        <li><b>5 &lt; γ &lt; 10</b>: 조건부 불안정 → 불포화이면 안정, <b>포화되면 불안정</b>. 강제 상승으로 응결 고도를 넘겨 자유 대류 고도에 이르면 스스로 상승한다.</li>
-      </ul>
-    </details>
-  </section>
-
+<main id="main">
+  <section class="tab-panel active" id="tab1" role="tabpanel" aria-labelledby="tabbtn-tab1"></section>
+  <section class="tab-panel" id="tab2" role="tabpanel" aria-labelledby="tabbtn-tab2"></section>
+  <section class="tab-panel" id="tab3" role="tabpanel" aria-labelledby="tabbtn-tab3"></section>
+  <section class="tab-panel" id="tab4" role="tabpanel" aria-labelledby="tabbtn-tab4"></section>
+  <section class="tab-panel" id="tab5" role="tabpanel" aria-labelledby="tabbtn-tab5"></section>
+  <section class="tab-panel" id="tab6" role="tabpanel" aria-labelledby="tabbtn-tab6"></section>
 </main>
 
-<!-- 미션 성공 축하 -->
-<div id="celebrate-overlay">
+<footer>© 2026 제작: 김연경(earthssaem@gmail.com) | <a class="hub" href="https://earthssaem-lab.vercel.app/" target="_blank" rel="noopener">연경쌤의 지구과학 실험실 둘러보기 →</a></footer>
+
+<!-- 미션 성공 알림 -->
+<div class="celebrate" id="celebrate" aria-live="polite">
   <div class="celebrate-card">
     <span class="big-star">⭐</span>
-    <div class="msg" id="celebrate-msg">미션 성공!</div>
+    <div><div class="msg" id="celebrate-msg">미션 성공!</div><div class="sub" id="celebrate-sub"></div></div>
   </div>
 </div>
 
 <!-- 수료증 -->
-<div id="cert-overlay">
+<div class="cert-overlay" id="cert-overlay" role="dialog" aria-modal="true" aria-labelledby="cert-title">
   <div class="cert-card">
-    <div style="font-size:56px">🏆</div>
-    <h2>기상 마스터 수료증</h2>
-    <div class="cert-stars">⭐⭐⭐ ⭐⭐⭐ ⭐⭐⭐</div>
-    <p>단열 변화 · 푄 현상 · 대기 안정도의 모든 미션을 완수하여<br><b>기상 마스터</b>가 되었음을 증명합니다.</p>
+    <div class="trophy">🏆</div>
+    <h2 id="cert-title">기상 마스터 수료증</h2>
+    <div class="cert-stars">⭐⭐⭐ ⭐⭐⭐ ⭐⭐⭐<br>⭐⭐⭐ ⭐⭐⭐ ⭐⭐⭐</div>
+    <p>단열 변화 · 푄 현상 · 대기 안정도 · 단열선도 · 안개 · 강수 과정의<br>모든 미션을 완수하여 <b>기상 마스터</b>가 되었음을 증명합니다.</p>
     <button class="btn big" id="cert-close">🎉 축하 인사 받기</button>
   </div>
 </div>
 
 <script src="physics.js"></script>
-<script src="app.js"></script>
+<script src="js/config.js"></script>
+<script src="js/common.js"></script>
+<script src="js/tab1-adiabatic.js"></script>
+<script src="js/tab2-foehn.js"></script>
+<script src="js/tab3-stability.js"></script>
+<script src="js/tab4-diagram.js"></script>
+<script src="js/tab5-fog.js"></script>
+<script src="js/tab6-precip.js"></script>
+<script src="js/main.js"></script>
 </body>
 </html>

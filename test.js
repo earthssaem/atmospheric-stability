@@ -108,6 +108,60 @@ console.log('[검증 6] 탭 2 미션 3 — 이슬점이 높을수록 온도 차 
   approx(P.foehn(20, 19, 2).deltaT, 5 * (2 - 0.125), 1e-9, 'ΔT 최댓값 = 5(M − H) = 9.375 ℃');
 }
 
+console.log('[검증 7] 교과서 그림 Ⅲ-15·16·17 — 지표 30 ℃, 상승 응결 고도 2 km (Td = 14 ℃)');
+{
+  approx(P.lcl(30, 14), 2, 0, 'H = ⅛(30 − 14) = 2 km');
+  approx(P.parcel(30, 14, 1).temp, 20, 0, '1 km 덩어리 20 ℃');
+  approx(P.parcel(30, 14, 3).temp, 5, 0, '3 km 덩어리 5 ℃ (습윤 단열)');
+  approx(P.envTemp(30, 4, 2), 22, 0, '그림 Ⅲ-15: γ=4, 2 km 주위 22 ℃ (덩어리 10 ℃ → 안정)');
+  approx(P.envTemp(30, 12, 1), 18, 0, '그림 Ⅲ-16: γ=12, 1 km 주위 18 ℃ (덩어리 20 ℃ → 불안정)');
+  approx(P.lfc(30, 14, 8), 10 / 3, 1e-9, '그림 Ⅲ-17: γ=8, 안정/불안정 경계 3.33 km');
+  equal(P.stability(-5), 'absolute-stable', '역전층(γ<0)도 절대 안정');
+  equal(P.layerState(-5).inversion, true, '역전층 표시');
+}
+
+console.log('[검증 8] 상대 습도 · 포화 수증기압');
+{
+  approx(P.relHumidity(20, 20), 100, 0, '기온 = 이슬점 → 100 %');
+  const rh = P.relHumidity(20, 14);
+  if (rh > 60 && rh < 75) { passed++; console.log(`  ✓ 20 ℃ / 14 ℃ → ${rh.toFixed(1)} %`); }
+  else { failed++; console.error(`  ✗ 상대 습도 범위 밖: ${rh}`); }
+  approx(P.satVaporWater(0), 6.112, 1e-9, '0 ℃ 포화 수증기압 6.11 hPa');
+  approx(P.satVaporIce(0), 6.112, 1e-9, '0 ℃에서 물과 얼음 포화 수증기압 같음');
+  let best = { T: 0, d: 0 };
+  for (let T = -40; T <= 0; T += 0.5) {
+    const d = P.satVaporWater(T) - P.satVaporIce(T);
+    if (d > best.d) best = { T, d };
+  }
+  if (best.T >= -14 && best.T <= -10 && best.d > 0.25 && best.d < 0.3) {
+    passed++; console.log(`  ✓ 포화 수증기압 차 최대: ${best.T} ℃에서 ${best.d.toFixed(3)} hPa (교과서 그림 Ⅲ-21)`);
+  } else { failed++; console.error(`  ✗ 포화 수증기압 차 최대 위치 이상: ${JSON.stringify(best)}`); }
+  equal(P.iceProcessState(-12, 2.3), 'ice-grows', '−12 ℃, 2.3 hPa → 빙정에 과포화·물방울에 불포화');
+  equal(P.iceProcessState(-12, 2.6), 'super-both', '−12 ℃, 2.6 hPa → 둘 다 과포화');
+  equal(P.iceProcessState(-12, 2.0), 'sub-both', '−12 ℃, 2.0 hPa → 둘 다 불포화');
+}
+
+console.log('[검증 9] 탐구 — (가)·(나) 지점 기온 감률');
+{
+  const S = P.SOUNDINGS;
+  approx(P.lapseRate(0, S.ga[0], 300, S.ga[6]), -10, 1e-9, '(가) 0~300 m: −10 ℃/km (역전층)');
+  equal(P.layerState(P.lapseRate(0, S.ga[0], 300, S.ga[6])).stability, 'absolute-stable', '(가) 0~300 m 절대 안정');
+  approx(P.lapseRate(300, S.ga[6], 500, S.ga[10]), 14, 1e-9, '(가) 300~500 m: 14 ℃/km');
+  equal(P.stability(14), 'absolute-unstable', '(가) 300~500 m 절대 불안정');
+  approx(P.lapseRate(0, S.na[0], 500, S.na[10]), 6, 1e-9, '(나) 0~500 m: 6 ℃/km');
+  equal(P.stability(6), 'conditional', '(나) 조건부 불안정');
+}
+
+console.log('[검증 10] 안개 모형');
+{
+  approx(P.nightTemp(16, 0, 11), 16, 1e-9, '18시 기온 = 출발 기온');
+  approx(P.nightTemp(16, 12, 11), 5, 1e-9, '맑고 바람 약함: 새벽 6시까지 11 ℃ 냉각');
+  approx(P.advectionTemp(24, 12, 0), 24, 1e-9, '이류 출발점 기온');
+  const x = P.advectionFogStart(24, 18, 12);
+  approx(P.advectionTemp(24, 12, x), 18, 1e-9, '이류 안개 시작 지점에서 기온 = 이슬점');
+  equal(P.advectionFogStart(24, 18, 19), null, '수온 > 이슬점이면 이류 안개 없음');
+}
+
 console.log('');
 console.log(`결과: ${passed}개 통과, ${failed}개 실패`);
 process.exit(failed > 0 ? 1 : 0);

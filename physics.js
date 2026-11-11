@@ -135,6 +135,98 @@
     return parcel(T0, Td, h).temp - envTemp(T0, gamma, h);
   }
 
+  /* ─────────────── 상대 습도 · 포화 수증기압 ─────────────── */
+
+  /** 물(과냉각 물방울 포함)에 대한 포화 수증기압 (hPa) — Magnus 식 */
+  function satVaporWater(T) {
+    return 6.112 * Math.exp((17.62 * T) / (243.12 + T));
+  }
+  /** 얼음(빙정)에 대한 포화 수증기압 (hPa) — Magnus 식 */
+  function satVaporIce(T) {
+    return 6.112 * Math.exp((22.46 * T) / (272.62 + T));
+  }
+  /**
+   * 상대 습도 (%) = 현재 수증기압 / 포화 수증기압 × 100.
+   * 현재 수증기압은 이슬점에서의 포화 수증기압과 같다.
+   */
+  function relHumidity(T, Td) {
+    if (Td >= T) return 100;
+    return (100 * satVaporWater(Td)) / satVaporWater(T);
+  }
+
+  /**
+   * 빙정설: 기온 T(℃), 실제 수증기압 e(hPa)인 구름 속 공기의 상태.
+   *  - 'super-both' : 물방울·빙정 모두에 대해 과포화 (둘 다 성장)
+   *  - 'ice-grows'  : 빙정에 대해 과포화, 과냉각 물방울에 대해 불포화 → 물방울 증발, 빙정 성장
+   *  - 'sub-both'   : 둘 다 불포화 (둘 다 증발/승화)
+   */
+  function iceProcessState(T, e) {
+    var ew = satVaporWater(T);
+    var ei = satVaporIce(T);
+    if (e > ew) return 'super-both';
+    if (e > ei) return 'ice-grows';
+    return 'sub-both';
+  }
+
+  /* ─────────────── 측정 자료(기온 분포) 해석 ─────────────── */
+
+  /** 두 높이(m) 사이의 기온 감률 (℃/km). 높이 올라갈수록 기온이 낮아지면 양수. */
+  function lapseRate(z1, T1, z2, T2) {
+    return ((T1 - T2) / (z2 - z1)) * 1000;
+  }
+
+  /**
+   * 기온 감률로 본 층의 상태. stability()와 같지만 역전층(기온 감률 < 0)을 따로 알려 준다.
+   * 반환: { stability, inversion }
+   */
+  function layerState(gamma) {
+    return { stability: stability(gamma), inversion: gamma < 0 };
+  }
+
+  /** 교과서 탐구(단열선도를 이용하여 대기 안정도 해석하기) 측정 자료 — 높이(m)별 기온(℃) */
+  var SOUNDINGS = {
+    heights: [0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500],
+    ga: [12.0, 12.5, 13.0, 13.5, 14.0, 14.5, 15.0, 14.3, 13.6, 12.9, 12.2],
+    na: [16.0, 15.7, 15.4, 15.1, 14.8, 14.5, 14.2, 13.9, 13.6, 13.3, 13.0]
+  };
+
+  /* ─────────────── 안개 모형 (수업용 단순 모형) ─────────────── */
+
+  /**
+   * 복사 안개: 저녁 18시 기온 T0에서 밤새 복사 냉각될 때 hour(18시 기준 경과 시간, 0~15) 후 지표 부근 기온.
+   * 맑고 바람이 약할수록 많이 식는다. 새벽 6시(12시간 후)까지 drop만큼 식고, 해가 뜬 뒤(12.5시간 후~) 다시 오른다.
+   * drop: 새벽까지의 냉각량 (℃) — radiationDrop(sky, wind)
+   */
+  var NIGHT_TAU = 5; // 냉각 시간 규모 (h)
+  function radiationDrop(sky, wind) {
+    if (sky === 'clear' && wind === 'calm') return 11;
+    if (sky === 'clear') return 4;
+    if (wind === 'calm') return 3;
+    return 2;
+  }
+  function nightTemp(T0, hour, drop) {
+    var norm = 1 - Math.exp(-12 / NIGHT_TAU);
+    var cool = function (t) { return (drop * (1 - Math.exp(-t / NIGHT_TAU))) / norm; };
+    if (hour <= 12.5) return T0 - cool(Math.min(hour, 12.5));
+    // 일출(6시 30분) 이후 시간당 2.5 ℃씩 승온
+    return T0 - cool(12.5) + 2.5 * (hour - 12.5);
+  }
+
+  /**
+   * 이류 안개: 기온 Tair인 온난 습윤한 공기가 수온 Tsea인 차가운 바다 위를 x(km)만큼 이동했을 때의 기온.
+   * 바다 쪽으로 열을 빼앗겨 수온에 가까워진다 (L: 적응 거리, km).
+   */
+  var ADVECTION_L = 60;
+  function advectionTemp(Tair, Tsea, x) {
+    return Tsea + (Tair - Tsea) * Math.exp(-x / ADVECTION_L);
+  }
+  /** 이류 안개가 생기기 시작하는 이동 거리 (km). 수온이 이슬점보다 높으면 null(안개 없음). */
+  function advectionFogStart(Tair, Td, Tsea) {
+    if (Td >= Tair) return 0;
+    if (Tsea >= Td) return null;
+    return -ADVECTION_L * Math.log((Td - Tsea) / (Tair - Tsea));
+  }
+
   return {
     DRY_LAPSE: DRY_LAPSE,
     MOIST_LAPSE: MOIST_LAPSE,
@@ -146,6 +238,18 @@
     envTemp: envTemp,
     stability: stability,
     lfc: lfc,
-    buoyancy: buoyancy
+    buoyancy: buoyancy,
+    satVaporWater: satVaporWater,
+    satVaporIce: satVaporIce,
+    relHumidity: relHumidity,
+    iceProcessState: iceProcessState,
+    lapseRate: lapseRate,
+    layerState: layerState,
+    SOUNDINGS: SOUNDINGS,
+    radiationDrop: radiationDrop,
+    nightTemp: nightTemp,
+    advectionTemp: advectionTemp,
+    advectionFogStart: advectionFogStart,
+    ADVECTION_L: ADVECTION_L
   };
 });
