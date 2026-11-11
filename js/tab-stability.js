@@ -292,28 +292,22 @@ const StabLab = (function () {
     const m = sh.more;
     ui.guideBox = h('div');
     m.appendChild(Fold('안내 실험 — 같은 공기, 다른 대기', ui.guideBox, true));
-    m.appendChild(Fold('대기 안정도와 판정 기준', h('div', { html: `
-      <p>공기 덩어리를 강제로 올리거나 내렸을 때 <b>원래 위치로 돌아가려는</b> 상태를 안정, <b>멀어지려는</b> 상태를 불안정이라고 해요. 같은 높이에서 공기 덩어리가 주위보다 차가우면 아래로, 따뜻하면 위로 힘(부력)을 받아요.</p>
+    m.appendChild(Fold('안정도 판정과 구름 모양', h('div', { html: `
+      <p>같은 높이에서 공기 덩어리가 주위보다 <b>차가우면 내려가고</b>, <b>따뜻하면 올라가요</b>. 처음 자리로 돌아오려 하면 안정, 멀어지려 하면 불안정이에요.</p>
       <table class="stage-table"><thead><tr><th>주위 기온 감률 γ</th><th>불포화 공기</th><th>포화 공기</th><th>판정</th></tr></thead><tbody>
       <tr><td>γ &lt; 5</td><td>안정</td><td>안정</td><td>절대 안정</td></tr>
       <tr><td>γ = 5</td><td>안정</td><td>중립</td><td>경계값</td></tr>
       <tr><td>5 &lt; γ &lt; 10</td><td>안정</td><td>불안정</td><td>조건부 불안정</td></tr>
       <tr><td>γ = 10</td><td>중립</td><td>불안정</td><td>경계값</td></tr>
       <tr><td>γ &gt; 10</td><td>불안정</td><td>불안정</td><td>절대 불안정</td></tr></tbody></table>
-      <p><b>상승 응결 고도</b>: 기온과 이슬점이 같아지는 높이 (구름 바닥)<br><b>자유 대류 고도</b>: 상승 경로에서 공기 덩어리가 주위보다 <b>따뜻해지기 시작</b>하는 높이 (이 위에서는 놓아도 스스로 올라가요)</p>
-      <p class="note">교과서 그림 Ⅲ-14 · Ⅲ-15 · Ⅲ-16 · Ⅲ-17</p>` }), false));
-    m.appendChild(Fold('구름 모양과 모형의 가정', h('div', { html: `
-      <ul><li><b>안정한 대기</b>에서 넓은 공기층이 강제로 올라가 응결하면 연직 운동이 억제되어 옆으로 퍼진 얇은 <b>층운형 구름</b>이 생기기 쉬워요.</li>
-      <li><b>불안정한 대기</b>에서는 응결 뒤에도 상승이 이어져 수직으로 두껍게 발달하는 <b>적운형 구름</b>이 생기기 쉬워요.</li>
-      <li><b>조건부 불안정</b>: 응결 뒤에도 주위보다 차가운 구간(층운형)과, 더 올라가 주위보다 따뜻해지는 구간(적운형으로 발달)이 나뉘어요.</li>
-      <li>장면 오른쪽의 구름은 지금 대기와 상승 과정에서 나타나는 <b>전형적인 모양을 보여 주는 정성적 표현</b>이에요. 공기 덩어리 하나가 구름 전체를 만든다는 뜻은 아니에요.</li>
-      <li>이 탭은 강수가 없는 단순 모형이에요(응결수는 공기 덩어리에 남고, 내려오면 증발). 습윤 단열 감률 5 ℃/km는 교과서 모형 값이에요.</li>
-      <li>움직이는 빠르기와 공기 덩어리 크기는 <b>교육용 표현</b>이에요. 기온 차가 클수록 더 세게 밀리고 공기 저항으로 점점 느려지도록 만들었을 뿐, 실제 상승 속도가 아니에요.</li></ul>` }), false));
+      <ul><li><b>자유 대류 고도</b>: 올라가던 공기 덩어리가 주위보다 따뜻해지기 시작하는 높이. 이 위에서는 놓아도 스스로 올라가요.</li>
+      <li>안정한 대기에서는 <b>층운형</b>, 불안정한 대기에서는 <b>적운형</b> 구름이 생기기 쉬워요. (장면의 구름은 정성적 표현)</li></ul>
+      <p class="note">교과서 그림 Ⅲ-14 ~ Ⅲ-17</p>` }), false));
     // 역전층 탐구 (심화)
     ui.invOn = Toggle('역전층 넣기', st.inv.on, v => { st.inv.on = v; syncInvUI(); conditionsChanged(); });
-    ui.invBase = NumField({ label: '역전층 시작 높이', min: 0.2, max: 5, step: 0.1, decimals: 1, value: st.inv.base, unit: 'km', onCommit: v => { st.inv.base = v; if (st.inv.on) conditionsChanged(); } });
-    ui.invDepth = NumField({ label: '역전층 두께', min: 0.1, max: 2, step: 0.1, decimals: 1, value: st.inv.depth, unit: 'km', onCommit: v => { st.inv.depth = v; if (st.inv.on) conditionsChanged(); } });
-    ui.invDT = NumField({ label: '역전층 안에서 기온 증가', min: 0, max: 10, step: 0.5, decimals: 1, value: st.inv.dT, unit: '℃', onCommit: v => { st.inv.dT = v; if (st.inv.on) conditionsChanged(); } });
+    ui.invBase = NumField({ label: '시작 높이', min: 0.2, max: 5, step: 0.1, decimals: 1, value: st.inv.base, unit: 'km', cls: 'compact', onCommit: v => { st.inv.base = v; if (st.inv.on) conditionsChanged(); } });
+    ui.invDepth = NumField({ label: '두께', min: 0.1, max: 2, step: 0.1, decimals: 1, value: st.inv.depth, unit: 'km', cls: 'compact', onCommit: v => { st.inv.depth = v; if (st.inv.on) conditionsChanged(); } });
+    ui.invDT = NumField({ label: '기온 증가', min: 0, max: 10, step: 0.5, decimals: 1, value: st.inv.dT, unit: '℃', cls: 'compact', onCommit: v => { st.inv.dT = v; if (st.inv.on) conditionsChanged(); } });
     ui.invInfo = h('div', { class: 'note' });
     const ex = Btn('예시 조건 넣기', 'sm accent', () => {
       st.T0 = 30; st.Td0 = 14; st.gamma = 12; st.inv = { on: true, base: 1.5, depth: 0.5, dT: 4 };
@@ -321,12 +315,15 @@ const StabLab = (function () {
       st.target = 0.5; ui.tz.set(0.5);
       st.notice = '예시: 감률 12 ℃/km 대기의 1.5~2.0 km에 기온이 4 ℃ 높아지는 역전층이 있어요. 0.50 km까지 올렸다 놓아 보세요.'; render();
     });
-    ui.invFold = Fold('역전층 탐구 <span class="tag">심화</span>', h('div', null,
-      h('p', { html: '기본 실험을 이해한 뒤 사용해요. <b>역전층</b>은 높이 올라갈수록 기온이 <b>높아지는</b> 층으로, 매우 안정해 아래에서 올라오던 공기의 상승을 막아요.' }),
+    // 더 해 보기: 도전 1개 + 역전층(심화)
+    ui.chBox = h('div');
+    const invSec = h('div', { class: 'more-sec' },
+      h('h4', { html: '역전층 넣어 보기 <span class="tag">심화</span>' }),
+      h('p', { html: '<b>역전층</b>은 높이 올라갈수록 기온이 <b>높아지는</b> 층이에요. 매우 안정해서 아래에서 올라오던 공기의 상승을 막아요.' }),
       h('div', { class: 'ch-row' }, ui.invOn.el, ex),
       h('div', { class: 'inv-fields' }, ui.invBase.el, ui.invDepth.el, ui.invDT.el), ui.invInfo,
-      h('p', { class: 'note', html: '주위 기온은 역전층 아래·안·위를 끊김 없이 이어서 계산해요. 운동은 그 높이의 주위 기온과 비교해 계산하고, 일정 감률용 자유 대류 고도 공식은 쓰지 않아요. 맑고 바람이 약한 날 새벽의 복사 냉각으로 지표 부근에 역전층이 잘 생기며, 오염 물질이 잘 퍼지지 못해 대기 오염이 심해질 수 있어요. (교과서 95쪽 역전층)' })), false);
-    m.appendChild(ui.invFold);
+      h('p', { class: 'note', html: '맑고 바람이 약한 새벽 지표 부근에 잘 생기고, 오염 물질이 잘 퍼지지 못해요. (교과서 95쪽)' }));
+    m.appendChild(Fold('더 해 보기 <span class="tag">도전 · 역전층</span>', h('div', null, ui.chBox, invSec), false));
     syncInvUI();
   }
   function syncInvUI() {
@@ -336,34 +333,7 @@ const StabLab = (function () {
   }
 
   function buildChallenges() {
-    const box = h('div');
-    sh.more.appendChild(Fold('도전 활동 <span class="tag">선택</span>', box, false));
-    ch = Challenges(box, L, [
-      {
-        id: 'stratus', title: '안정한 대기에서 강제 상승으로 구름 만들기',
-        goal: '<b>절대 안정</b>한 대기(역전층 없이)에서 공기를 상승 응결 고도 위까지 <b>강제로 올린 뒤 놓아</b> 어떻게 움직이는지 확인하세요.',
-        hints: ['감률 γ를 습윤 단열 감률(5 ℃/km)과 비교해 보세요.', 'γ < 5이면 포화되어도 공기 덩어리가 주위보다 차가워요. 응결 고도 위로 올려야 구름이 생겨요.', '응결 고도 H = (T₀ − Td₀)/8. 목표 높이를 H보다 높게!'],
-        check(lab, since) {
-          const ok = (e) => e.cls === 'absolute-stable' && !e.inv;
-          const lifts = lab.since(since, 'lift').filter(e => ok(e) && e.sat);
-          if (!lifts.length) return false;
-          const outs = lab.since(lifts[0].seq, 'outcome').filter(e => e.cls === 'absolute-stable' && e.dir < 0 && e.z0 > Physics.lcl(st.T0, st.Td0));
-          return outs.length > 0;
-        },
-        success: '안정한 대기에서는 응결 고도 위로 강제로 올려도 주위보다 차가워 다시 내려가요. 넓은 공기층이 이렇게 들려 올라가면 얇게 퍼진 층운형 구름이 생기기 쉬워요.'
-      },
-      {
-        id: 'cond2', title: '조건부 불안정에서 두 높이에 놓았을 때 비교하기',
-        goal: '<b>조건부 불안정</b> 대기에서 같은 공기를 서로 다른 두 높이에서 놓아, <b>한 번은 내려가고 한 번은 올라가는</b> 모습을 관찰하세요.',
-        hints: ['두 높이에서 공기 덩어리 기온과 주위 기온을 비교해 보세요.', '응결 고도 위에서 공기 덩어리는 5 ℃/km, 주위는 γ ℃/km씩 식어 언젠가 공기 덩어리가 더 따뜻해져요.', '자유 대류 고도 = 5H/(γ − 5). 30 ℃·14 ℃·γ 8이면 약 3.33 km'],
-        check(lab, since) {
-          const outs = lab.since(since, 'outcome').filter(e => e.cls === 'conditional');
-          const byKey = {};
-          outs.forEach(e => { (byKey[e.key] = byKey[e.key] || []).push(e); });
-          return Object.values(byKey).some(list => list.some(e => e.dir < 0 && e.z0 > 0.05) && list.some(e => e.dir > 0));
-        },
-        success: '자유 대류 고도보다 낮은 곳에서는 놓으면 내려가고, 높은 곳에서는 스스로 올라가요. 상승 응결 고도(구름 바닥)와 자유 대류 고도는 다른 높이예요.'
-      },
+    ch = Challenges(ui.chBox, L, [
       {
         id: 'cumulus', title: '불안정한 대기에서 스스로 올라가는 공기 관찰하기',
         goal: '<b>절대 불안정</b> 대기에서 공기를 응결 고도보다 낮은 곳까지 살짝 올렸다 놓아, 응결 고도를 지나 <b>스스로 계속 올라가는</b> 모습을 관찰하세요.',
@@ -377,6 +347,7 @@ const StabLab = (function () {
       }
     ]);
   }
+
 
   /* ───────── 그리기 ───────── */
   function xRange() {
@@ -772,15 +743,13 @@ const StabLab = (function () {
     const isDef = st.T0 === 30 && st.Td0 === 14 && !st.inv.on;
     const add = (label, z, desc) => ui.guideBox.appendChild(h('div', { class: 'exp' }, h('div', null, h('div', { class: 't', html: label }), h('div', { class: 'd', html: desc })),
       Btn(`${fZ(z)} km까지 올리기`, 'sm accent', () => { resetMotion(); st.target = z; ui.tz.set(z); liftTo(z); sh.panel.scrollIntoView({ behavior: REDUCED_MOTION ? 'auto' : 'smooth', block: 'center' }); })));
-    ui.guideBox.appendChild(h('p', { class: 'note', html: '대표 감률 4 · 8 · 12 ℃/km를 바꿔도 지표 공기(30 ℃ · 14 ℃, 응결 고도 2 km)는 그대로예요. 올리면 그 높이에 붙잡아 두고, <b>놓아주기</b>를 누르면 움직이기 시작해요. 공기 덩어리를 직접 끌어 옮겨도 돼요.' }));
-    const warmTxt = iv.warm.length ? iv.warm.map(([a, b2]) => `${fApprox(a)}~${b2 >= ZMAX - 1e-6 ? ZMAX : fApprox(b2)} km`).join(', ') : '없음';
-    ui.guideBox.appendChild(h('p', { class: 'note', html: `지금 조건에서 공기 덩어리가 주위보다 따뜻한 구간(0~${ZMAX} km): <b>${warmTxt}</b>` }));
-    if (!isDef) { ui.guideBox.appendChild(h('p', { class: 'note', text: '안내 실험은 지표 기온 30 ℃ · 이슬점 14 ℃(역전층 없음)에서 준비돼 있어요. 조건 기본값을 누르면 돌아가요.' })); return; }
+    ui.guideBox.appendChild(h('p', { class: 'note', html: '같은 지표 공기(30 ℃ · 14 ℃)를 감률 4 · 8 · 12 ℃/km 대기에서 올려 보세요. 올린 높이에 붙잡아 두었다가 <b>놓아주기</b>로 움직임을 봐요.' }));
+    if (!isDef) { ui.guideBox.appendChild(h('p', { class: 'note', text: '안내 실험은 30 ℃ · 14 ℃(역전층 없음)에서 준비돼 있어요. 조건 기본값을 누르면 돌아가요.' })); return; }
     const c = Physics.stabilityClass(st.gamma).key;
     if (c === 'conditional' && Math.abs(st.gamma - 8) < 1e-9) {
       add('① 2.00 km에서 놓기', 2, '공기 10 ℃ · 주위 14 ℃ — 놓으면?');
       add('② 3.50 km에서 놓기', 3.5, '공기 2.5 ℃ · 주위 2 ℃ — 놓으면?');
-      ui.guideBox.appendChild(h('p', { class: 'note', html: `자유 대류 고도는 약 ${fZ(iv.lfc)} km예요. 정확히 그 높이에 놓으면 두 기온이 같고 속도가 0이라 바로 움직이지 않을 수 있어, 조금 더 높은 3.50 km를 써요. <b>예상 경로와 판정 보기</b>로 확인해 보세요.` }));
+      ui.guideBox.appendChild(h('p', { class: 'note', html: `두 높이 사이에 자유 대류 고도(약 ${fZ(iv.lfc)} km)가 있어요.` }));
     } else if (c === 'absolute-stable') add('2.50 km에서 놓기', 2.5, '응결 고도(2 km) 위로 강제로 올린 뒤 놓으면?');
     else if (c === 'absolute-unstable') add('0.50 km에서 놓기', 0.5, '응결 고도 아래에서 살짝 올렸다 놓으면?');
     else ui.guideBox.appendChild(h('p', { class: 'note', text: '대표 감률(4 · 8 · 12)을 고르면 안내 실험이 나타나요.' }));

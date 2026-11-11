@@ -70,43 +70,29 @@ const LclLab = (function () {
 
   function buildMore() {
     const m = sh.more;
-    m.appendChild(Fold('관찰 안내 — 무엇을 볼까요?', h('div', { html: `
-      <ul><li>그래프의 <b style="color:var(--temp)">빨간 점(기온)</b>과 <b style="color:var(--dew)">파란 점(이슬점)</b> 사이 거리가 어떻게 바뀌는지 보세요.</li>
-      <li>두 점이 만나는 높이와 장면의 <b>구름 바닥</b>이 같은 가로선 위에 있는지 확인하세요.</li>
-      <li>만난 뒤에는 두 값이 함께 낮아져요. 수치 칸에서 두 값을 각각 읽어 보세요.</li></ul>` }), true));
+    m.appendChild(Fold('관찰 안내', h('div', { html: `
+      <ul><li><b style="color:var(--temp)">기온(빨간 점)</b>과 <b style="color:var(--dew)">이슬점(파란 점)</b> 사이가 어떻게 바뀌나요?</li>
+      <li>두 점이 만나는 높이와 장면의 <b>구름 바닥</b>이 같은 가로선 위에 있나요?</li></ul>` }), true));
     ui.foldLCL = Fold('상승 응결 고도 구하기', h('div', { html: `
-      <p>지표에서 출발한 불포화 공기는 1 km 오를 때마다 기온이 10 ℃, 이슬점이 2 ℃ 낮아져 두 값의 차이가 <b>8 ℃씩</b> 줄어요.</p>
+      <p>불포화 공기는 1 km 오를 때마다 기온이 10 ℃, 이슬점이 2 ℃ 낮아져 두 값의 차이가 <b>8 ℃씩</b> 줄어요. 응결 고도 위에서는 둘 다 5 ℃/km씩 낮아져요.</p>
       <div class="eq">(T<sub>0</sub> − 10H) = (Td<sub>0</sub> − 2H) &nbsp;→&nbsp; <b>H(km) = (T<sub>0</sub> − Td<sub>0</sub>) / 8</b></div>
       <p id="lcl-calc"></p>
-      <p class="note">교과서 그림 Ⅲ-12 상승 응결 고도</p>` }), false);
+      <p class="note">교과서 그림 Ⅲ-12</p>` }), false);
     ui.foldLCL.addEventListener('toggle', () => {
       if (ui.foldLCL.open && st.guided && !st.revealed) { ui.foldLCL.open = false; ui.ro.guide('', '', '먼저 공기를 올려 기온과 이슬점이 같아지는 높이를 찾아보세요. 그 높이에 닿으면 이 설명을 볼 수 있어요.'); }
     });
     m.appendChild(ui.foldLCL);
-    m.appendChild(Fold('단열 변화와 모형의 가정', h('div', { html: `
-      <ul><li>공기 덩어리가 상승하면 주위 기압이 낮아져 <b>팽창</b>하고 기온이 낮아져요(단열 팽창). 내려가면 압축되어 기온이 높아져요.</li>
-      <li>불포화: 기온 <b>10 ℃/km</b>(건조 단열 감률), 이슬점 <b>2 ℃/km</b>씩 변해요.</li>
-      <li>포화: 응결열이 방출되어 기온과 이슬점이 함께 <b>5 ℃/km</b>씩 변해요. 이 5 ℃/km는 이 앱이 쓰는 <b>교과서 모형 값</b>이에요(실제로는 기온·습도에 따라 달라요).</li>
-      <li>이 탭은 <b>강수가 없는</b> 단순 모형이에요. 응결한 물방울이 공기 덩어리에 남아 있어, 다시 내려오면 증발하며 같은 높이에서 같은 상태로 돌아가요.</li>
-      <li>공기 덩어리의 크기 변화와 물방울 수는 <b>정성적인 표현</b>이며, 실제 크기나 물방울 양을 계산한 값이 아니에요.</li>
-      <li>상대 습도 = 이슬점의 포화 수증기압 ÷ 현재 기온의 포화 수증기압 × 100 (포화 수증기압은 Magnus 식으로 계산)</li></ul>` }), false));
-    // 추가 실험
+    // 더 해 보기: 실험 2개 + 도전 1개
     const exps = [
-      { t: '이슬점을 높이면 구름 바닥은?', d: '기온 20 ℃ 고정 · 이슬점 12 ℃ → 16 ℃', run: () => setupExperiment({ T0: 20, Td0: 12 }, { T0: 20, Td0: 16 }, '이슬점 12 ℃ 공기를 비교용으로 남겼어요. 이슬점 16 ℃ 공기를 올려 구름 바닥을 비교해 보세요.') },
-      { t: '기온을 높이면 구름 바닥은?', d: '이슬점 12 ℃ 고정 · 기온 20 ℃ → 24 ℃', run: () => setupExperiment({ T0: 20, Td0: 12 }, { T0: 24, Td0: 12 }, '기온 20 ℃ 공기를 비교용으로 남겼어요. 기온 24 ℃ 공기를 올려 구름 바닥을 비교해 보세요.') },
-      { t: '처음부터 기온 = 이슬점이면?', d: '기온 15 ℃ · 이슬점 15 ℃', run: () => setupExperiment(null, { T0: 15, Td0: 15 }, '지표에서 이미 포화된 공기예요. 올리면 기온과 이슬점이 어떻게 변하는지 보세요.') },
-      { t: '같은 높이에서 기온 비교', d: '20 ℃·12 ℃와 20 ℃·16 ℃를 2 km에서', run: () => { setupExperiment({ T0: 20, Td0: 12 }, { T0: 20, Td0: 16 }, '같은 2.00 km에서 두 공기의 기온을 수치 칸의 “비교” 값과 함께 읽어 보세요.'); setZ(2); } }
+      { t: '이슬점을 높이면 구름 바닥은?', d: '기온 20 ℃ · 이슬점 12 ℃ → 16 ℃', run: () => setupExperiment({ T0: 20, Td0: 12 }, { T0: 20, Td0: 16 }, '이슬점 12 ℃ 공기를 비교용으로 남겼어요. 이슬점 16 ℃ 공기를 올려 구름 바닥을 비교해 보세요.') },
+      { t: '기온을 높이면 구름 바닥은?', d: '이슬점 12 ℃ · 기온 20 ℃ → 24 ℃', run: () => setupExperiment({ T0: 20, Td0: 12 }, { T0: 24, Td0: 12 }, '기온 20 ℃ 공기를 비교용으로 남겼어요. 기온 24 ℃ 공기를 올려 구름 바닥을 비교해 보세요.') }
     ];
-    const list = h('div', { class: 'exp-list' });
-    exps.forEach(e => list.appendChild(h('div', { class: 'exp' }, h('div', null, h('div', { class: 't', text: e.t }), h('div', { class: 'd', text: e.d })), Btn('실험 준비', 'sm', e.run))));
-    m.appendChild(Fold('추가 실험', list, false));
+    ui.moreBox = h('div', null, expList(exps));
+    m.appendChild(Fold('더 해 보기 <span class="tag">선택</span>', ui.moreBox, false));
   }
 
   function buildChallenges() {
-    const box = h('div');
-    ui.chFold = Fold('도전 활동 <span class="tag">선택</span>', box, false);
-    sh.more.appendChild(ui.chFold);
-    ch = Challenges(box, L, [
+    ch = Challenges(ui.moreBox, L, [
       {
         id: 'base2', title: '구름 바닥을 2.00 km로 맞추기',
         goal: '응결 고도가 정확히 <b>2.00 km</b>가 되도록 조건을 정하고, 공기를 올려 구름 바닥을 확인하세요.',
@@ -115,41 +101,6 @@ const LclLab = (function () {
           'H = (T₀ − Td₀) / 8 → 2.00 km가 되려면 T₀ − Td₀ = 16 ℃'],
         check: (lab, since) => lab.since(since, 'reachLCL').some(e => Math.abs(e.H - 2) < 1e-6),
         success: '구름 바닥 2.00 km! 기온과 이슬점의 차이가 16 ℃이면 2 km 올라가야 두 값이 같아져요.'
-      },
-      {
-        id: 'sameZ', title: '이슬점을 바꾸어 같은 높이의 기온 비교하기',
-        goal: '지금 결과를 <b>비교용으로 남긴</b> 뒤, 기온은 그대로 두고 <b>이슬점만</b> 바꾸세요. 두 공기가 모두 응결 고도를 지난 같은 높이에서 기온을 비교하세요.',
-        hints: ['비교 선(옅은 선)과 지금 선을 같은 높이에서 읽어 보세요.',
-          '이슬점이 높으면 응결 고도가 낮아져, 5 ℃/km로 천천히 식는 구간이 길어져요.',
-          '높이 z(응결 고도 위)의 기온 = T₀ − 10H − 5(z − H) = T₀ − 5H − 5z'],
-        ready: () => st.cmp && Math.abs(st.cmp.T0 - st.T0) < 1e-9 && Math.abs(st.cmp.Td0 - st.Td0) > 1e-9 &&
-          st.z >= Math.max(H(), Physics.lcl(st.cmp.T0, st.cmp.Td0)) + 0.1,
-        extra(lab, it, rerender) {
-          if (!it.ready()) return h('div', { class: 'ch-status', text: '조건: 비교 기록(같은 기온·다른 이슬점)과, 두 응결 고도보다 높은 위치가 필요해요.' });
-          const wrap = h('div', null, h('div', { class: 'ch-status', html: `지금 ${fZ(st.z)} km — 같은 높이에서 기온이 더 높은 공기는?` }));
-          const c = h('div', { class: 'choice' });
-          const higher = st.Td0 > st.cmp.Td0 ? 'cur' : 'cmp';
-          [['cur', `지금 공기 (이슬점 ${fT(st.Td0)} ℃)`], ['cmp', `비교 공기 (이슬점 ${fT(st.cmp.Td0)} ℃)`], ['same', '두 공기의 기온이 같다']].forEach(([k, label]) => {
-            const b = Btn(label, it.pick === k ? (k === higher ? 'right' : 'wrong') : '', () => { it.pick = k; it.answered = lab.seq; rerender(); ch.check(); });
-            c.appendChild(b);
-          });
-          wrap.appendChild(c);
-          return wrap;
-        },
-        check: (lab, since) => {
-          const it = ch.items.find(x => x.id === 'sameZ');
-          if (!it.ready() || !it.pick) return false;
-          const higher = st.Td0 > st.cmp.Td0 ? 'cur' : 'cmp';
-          return it.pick === higher ? true : { ok: false, msg: '다시 생각해 보세요. 그래프에서 같은 높이의 두 빨간 선을 비교해요.' };
-        },
-        success: '이슬점이 높은 공기는 응결 고도가 낮아, 같은 높이에서 기온이 더 높아요(5 ℃/km로 식는 구간이 길어서).'
-      },
-      {
-        id: 'satStart', title: '처음부터 포화된 공기 관찰하기',
-        goal: '지표 기온과 이슬점을 <b>같게</b> 하고 공기를 <b>1 km 이상</b> 올려, 기온과 이슬점이 함께 변하는지 확인하세요.',
-        hints: ['기온과 이슬점이 같으면 상대 습도가 100 %예요.', '포화된 공기는 오르는 동안 기온과 이슬점이 함께 5 ℃/km씩 낮아져요.', 'H = (T₀ − Td₀)/8 = 0 → 지표부터 응결'],
-        check: (lab, since) => Math.abs(st.T0 - st.Td0) < 1e-9 && lab.lastMove && lab.lastMove.seq > since && st.z >= 1 - 1e-9,
-        success: '응결 고도가 0 km라 올라가자마자 응결이 일어나고, 기온과 이슬점이 함께 5 ℃/km씩 낮아져요.'
       }
     ]);
   }

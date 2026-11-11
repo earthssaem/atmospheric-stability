@@ -90,31 +90,22 @@ const FoehnLab = (function () {
     const m = sh.more;
     ui.table = h('div');
     m.appendChild(Fold('단계별 표 — 출발 · 응결 시작 · 정상 · 도착', ui.table, false));
-    m.appendChild(Fold('높새바람과 모형의 가정', h('div', { html: `
-      <ul><li>늦봄~초여름 오호츠크해 기단의 <b>동풍(북동풍)</b>이 태백산맥을 넘으면 영서 지방에 고온 건조한 <b>높새바람</b>이 불어요.</li>
-      <li>풍상측(영동): 불포화 상승(기온 −10, 이슬점 −2 ℃/km) → 응결 고도부터 포화 상승(둘 다 −5 ℃/km), 구름이 생기고 <b>비가 내려 수분을 잃어요</b>.</li>
-      <li>풍하측(영서): 내려가자마자 불포화가 되어 기온 +10, 이슬점 +2 ℃/km. 기온이 더 빨리 올라 <b>상대 습도가 낮아져요</b>.</li>
-      <li>출발과 도착을 비교하면 강수로 수분을 잃은 공기가 <b>더 따뜻하고 이슬점은 더 낮아요</b>.</li>
-      <li>이 탭은 <b>풍상측에서 응결한 물이 모두 비로 떨어진다</b>고 가정한 교과서 모형이에요. 출발과 도착의 높이는 같은 0 km로 두었어요.</li>
-      <li>응결이 일어나지 않으면(산이 응결 고도보다 낮으면) 내려오며 오를 때의 변화를 그대로 되돌려 도착 값이 출발 값과 같아요.</li>
-      <li>습윤 단열 감률 5 ℃/km는 교과서 모형 값이에요. 비·구름의 양과 공기 덩어리 크기는 정성적인 표현이에요.</li>
-      <li>상대 습도 = 이슬점의 포화 수증기압 ÷ 기온의 포화 수증기압 × 100 (Magnus 식)</li></ul>
-      <p class="note">교과서 그림 Ⅲ-13 높새바람</p>` }), false));
+    m.appendChild(Fold('높새바람의 원리', h('div', { html: `
+      <ul><li><b>풍상측(영동)</b>: 응결 고도까지 기온 −10, 이슬점 −2 ℃/km → 그 위는 둘 다 −5 ℃/km. 구름이 생기고 <b>비로 수분을 잃어요</b>.</li>
+      <li><b>풍하측(영서)</b>: 내려오며 기온 +10, 이슬점 +2 ℃/km.</li>
+      <li>그래서 도착한 공기는 출발 때보다 <b>더 따뜻하고 건조해요</b>.</li></ul>
+      <p class="note">응결한 물은 모두 비로 떨어진다고 본 교과서 모형 · 그림 Ⅲ-13</p>` }), false));
+    // 더 해 보기: 실험 2개 + 도전 1개
     const exps = [
       { t: '산 높이가 다르면 도착 기온은?', d: '같은 공기(20 ℃·12 ℃) · 산 2 km와 3 km', run: () => setupExperiment({ T0: 20, Td0: 12, M: 2 }, { T0: 20, Td0: 12, M: 3 }, '산 2 km 결과를 비교용으로 남겼어요. 산 3 km를 넘겨 도착 기온을 비교해 보세요.') },
-      { t: '응결 고도에 못 미치는 낮은 산', d: '20 ℃·12 ℃ · 산 0.5 km', run: () => setupExperiment({ T0: 20, Td0: 12, M: 2 }, { T0: 20, Td0: 12, M: 0.5 }, '응결 고도(1 km)보다 낮은 산이에요. 도착 기온·이슬점을 출발과 비교해 보세요.') },
-      { t: '산 높이 = 응결 고도', d: '20 ℃·12 ℃ · 산 1.0 km', run: () => setupExperiment(null, { T0: 20, Td0: 12, M: 1 }, '정상에서 처음 포화에 도달해요. 포화 상승 구간이 없으면 도착 값은 어떻게 될까요?') },
-      { t: '처음부터 포화된 공기', d: '15 ℃·15 ℃ · 산 2 km', run: () => setupExperiment(null, { T0: 15, Td0: 15, M: 2 }, '출발부터 포화된 공기예요. 오르는 내내 비가 내려요.') }
+      { t: '응결 고도보다 낮은 산이면?', d: '20 ℃·12 ℃ · 산 0.5 km', run: () => setupExperiment({ T0: 20, Td0: 12, M: 2 }, { T0: 20, Td0: 12, M: 0.5 }, '응결 고도(1 km)보다 낮은 산이에요. 도착 기온·이슬점을 출발과 비교해 보세요.') }
     ];
-    const list = h('div', { class: 'exp-list' });
-    exps.forEach(e => list.appendChild(h('div', { class: 'exp' }, h('div', null, h('div', { class: 't', text: e.t }), h('div', { class: 'd', text: e.d })), Btn('실험 준비', 'sm', e.run))));
-    m.appendChild(Fold('비교 사례', list, false));
+    ui.moreBox = h('div', null, expList(exps));
+    m.appendChild(Fold('더 해 보기 <span class="tag">선택</span>', ui.moreBox, false));
   }
 
   function buildChallenges() {
-    const box = h('div');
-    sh.more.appendChild(Fold('도전 활동 <span class="tag">선택</span>', box, false));
-    ch = Challenges(box, L, [
+    ch = Challenges(ui.moreBox, L, [
       {
         id: 'predict', title: '산을 넘은 뒤 도착 기온 예상하기',
         goal: '바람을 보내기 전에 영서 <b>도착 기온</b>을 계산해 입력하고 확정한 뒤, 공기를 도착까지 보내 확인하세요. (±0.5 ℃)',
@@ -146,48 +137,6 @@ const FoehnLab = (function () {
           return { ok: false, msg: `예상 ${fT(it.pred)} ℃ · 실제 ${fT(arr.Ta)} ℃ (차이 ${fT(diff)} ℃). 단계별 표를 보며 다시 계산해 보세요.` };
         },
         success: '정상까지 잃은 온도보다 내려오며 얻은 온도가 커서 도착 기온이 출발보다 높아요.'
-      },
-      {
-        id: 'dew', title: '출발과 도착의 이슬점 차이 설명하기',
-        goal: '응결과 강수가 일어나는 조건에서 공기를 도착까지 보낸 뒤, 도착 이슬점이 출발보다 낮은 까닭을 고르세요.',
-        hints: ['수치 칸에서 출발과 도착의 이슬점을 비교해 보세요.', '이슬점은 공기 속 수증기의 양과 관련 있어요. 풍상측에서는 무엇이 일어났나요?', '도착 이슬점 = 정상 이슬점 + 2M. 정상까지 포화 상승하며 이슬점이 5 ℃/km씩 낮아졌어요.'],
-        ready: (lab, since) => lab.since(since, 'arrive').some(e => e.pre),
-        extra(lab, it, rerender) {
-          if (!it.ready(lab, ch.st.since)) return h('div', { class: 'ch-status', text: '조건: 구름과 비가 생기는 조건에서 도착까지 보내기' });
-          const opts = [['rain', '풍상측에서 비가 내려 수증기가 빠져나갔기 때문'], ['down', '내려올 때 이슬점이 2 ℃/km씩 낮아지기 때문'], ['high', '도착 지점이 출발 지점보다 높기 때문']];
-          const c = h('div', { class: 'choice' });
-          opts.forEach(([k, label]) => c.appendChild(Btn(label, it.pick === k ? (k === 'rain' ? 'right' : 'wrong') : '', () => { it.pick = k; rerender(); ch.check(); })));
-          return c;
-        },
-        check(lab, since) {
-          const it = ch.items.find(x => x.id === 'dew');
-          if (!it.ready(lab, since) || !it.pick) return false;
-          return it.pick === 'rain' ? true : { ok: false, msg: it.pick === 'down' ? '내려올 때 이슬점은 2 ℃/km씩 높아져요. 그래프의 하강 구간을 보세요.' : '이 앱에서 출발과 도착 높이는 같은 0 km예요.' };
-        },
-        success: '강수로 수분을 잃어 수증기량이 줄었기 때문에, 같은 0 km로 돌아와도 이슬점이 출발보다 낮아요.'
-      },
-      {
-        id: 'height', title: '산 높이가 다른 두 경로의 도착 기온 비교하기',
-        goal: '지금 결과를 <b>비교용으로 남긴</b> 뒤, 같은 공기에서 <b>산 높이만</b> 바꿔 도착까지 보내고 두 도착 기온을 비교하세요.',
-        hints: ['비교 선(옅은 선)과 지금 선의 도착 지점(0 km)을 보세요.', '산이 높을수록 포화 상승(−5 ℃/km) 구간이 길어지고, 내려올 때(+10 ℃/km) 더 많이 데워져요.', '응결이 일어나면 도착 기온 = T₀ + 5(M − H)'],
-        ready: (lab, since) => st.cmp && st.cmp.T0 === st.T0 && st.cmp.Td0 === st.Td0 && Math.abs(st.cmp.M - st.M) > 1e-9 && lab.since(since, 'arrive').some(e => e.M === st.M && e.T0 === st.T0 && e.Td0 === st.Td0),
-        extra(lab, it, rerender) {
-          if (!it.ready(lab, ch.st.since)) return h('div', { class: 'ch-status', text: '조건: 비교 기록(같은 공기·다른 산 높이)과 지금 경로의 도착' });
-          const a1 = F().arrival.T, a2 = Physics.foehn(st.cmp.T0, st.cmp.Td0, st.cmp.M).arrival.T;
-          const hiIsCur = st.M > st.cmp.M;
-          const ans = Math.abs(a1 - a2) < 0.05 ? 'same' : ((a1 > a2) === hiIsCur ? 'high' : 'low');
-          it.ans = ans;
-          const c = h('div', { class: 'choice' });
-          [['high', '산이 높은 경로의 도착 기온이 더 높다'], ['low', '산이 낮은 경로의 도착 기온이 더 높다'], ['same', '두 경로의 도착 기온이 같다']].forEach(([k, label]) =>
-            c.appendChild(Btn(label, it.pick === k ? (k === ans ? 'right' : 'wrong') : '', () => { it.pick = k; rerender(); ch.check(); })));
-          return c;
-        },
-        check(lab, since) {
-          const it = ch.items.find(x => x.id === 'height');
-          if (!it.ready(lab, since) || !it.pick) return false;
-          return it.pick === it.ans ? true : { ok: false, msg: '두 경로의 도착 지점(0 km) 기온을 그래프와 단계별 표에서 다시 비교해 보세요.' };
-        },
-        success: '응결이 일어나는 산이라면 산이 높을수록 포화 상승 구간이 길어져 도착 기온이 더 높아요. 둘 다 응결 고도보다 낮으면 도착 기온은 같아요.'
       }
     ]);
   }
@@ -603,15 +552,14 @@ const FoehnLab = (function () {
     ui.ro.guide(state, cls, msg);
   }
   function renderTable(fo, stg) {
-    const rows = [['start', fo.start, '불포화' + (fo.start.saturated ? '→포화' : '')], ['lcl', fo.lclPoint, '포화 시작'], ['summit', fo.summit, fo.summit.saturated ? '포화' : '불포화'], ['arrive', fo.arrival, '불포화']];
-    let html = '<table class="stage-table"><thead><tr><th>단계</th><th>높이</th><th>기온</th><th>이슬점</th><th>상대 습도</th><th>상태</th></tr></thead><tbody>';
-    rows.forEach(([k, p, state]) => {
-      if (!p) { html += `<tr><td>${STAGE_NAME[k]}</td><td colspan="5" style="text-align:left;color:var(--muted)">경로에 없음 — 정상까지 응결하지 않음</td></tr>`; return; }
-      if (k === 'start' && fo.start.saturated) state = '포화';
-      html += `<tr class="${stg === k ? 'cur' : ''}"><td>${STAGE_NAME[k]}</td><td>${fZ(p.z)} km</td><td class="t">${fT(p.T)} ℃</td><td class="d">${fT(p.Td)} ℃</td><td>${fmt(Physics.relHumidity(p.T, p.Td), 0)} %</td><td>${state}</td></tr>`;
+    const rows = [['start', fo.start], ['lcl', fo.lclPoint], ['summit', fo.summit], ['arrive', fo.arrival]];
+    let html = '<table class="stage-table"><thead><tr><th>단계</th><th>높이</th><th>기온</th><th>이슬점</th><th>상대 습도</th></tr></thead><tbody>';
+    rows.forEach(([k, p]) => {
+      if (!p) { html += `<tr><td>${STAGE_NAME[k]}</td><td colspan="4" style="text-align:left;color:var(--muted)">정상까지 응결하지 않음</td></tr>`; return; }
+      html += `<tr class="${stg === k ? 'cur' : ''}"><td>${STAGE_NAME[k]}</td><td>${fZ(p.z)} km</td><td class="t">${fT(p.T)} ℃</td><td class="d">${fT(p.Td)} ℃</td><td>${fmt(Physics.relHumidity(p.T, p.Td), 0)} %</td></tr>`;
     });
     html += '</tbody></table>';
-    html += `<p class="note">출발 → 도착: 기온 ${signed(fo.dT)} ℃, 이슬점 ${signed(fo.dTd)} ℃ · 변화율: 불포화 상승 기온 −10/이슬점 −2, 포화 상승 둘 다 −5, 하강 기온 +10/이슬점 +2 (℃/km)</p>`;
+    html += `<p class="note">출발 → 도착: 기온 ${signed(fo.dT)} ℃, 이슬점 ${signed(fo.dTd)} ℃</p>`;
     if (ui.table.innerHTML !== html) ui.table.innerHTML = html;
   }
   function renderControls() {

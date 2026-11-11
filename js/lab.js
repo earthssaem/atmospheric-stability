@@ -185,18 +185,25 @@ function CompareUI(container, onSave, onClear) {
  * item: {id, title, goal, hints: [무엇을 비교할지, 관계, 계산식], setup?(lab), check(lab, since) → true | {ok, msg},
  *        extra?(lab, item, rerender) → 요소, success: 문장}
  * 도전을 시작한 뒤에 일어난 일(lab.events 중 seq > since)만 판정에 쓴다. */
+/** 추가 실험 목록: [{t, d, run}] → 「실험 준비」 버튼이 달린 줄들 */
+function expList(exps) {
+  const list = h('div', { class: 'exp-list' });
+  exps.forEach(e => list.appendChild(h('div', { class: 'exp' }, h('div', null, h('div', { class: 't', text: e.t }), h('div', { class: 'd', text: e.d })), Btn('실험 준비', 'sm', e.run))));
+  return list;
+}
+
 function Challenges(container, lab, items) {
   const st = { active: null, since: 0 };
   items.forEach(it => { it.done = false; it.hint = 0; it.msg = ''; });
-  const list = h('div');
-  const head = h('p', { class: 'note', html: '원하는 활동을 골라 <b>도전 시작</b>을 누르세요. 시작한 뒤의 관찰만 판정해요.' });
-  container.append(head, list);
+  const list = h('div', { class: 'ch-list' });
+  const one = items.length === 1;
+  container.append(list);
   function render() {
     clear(list);
     items.forEach((it, i) => {
       const active = st.active === it.id;
       const card = h('div', { class: 'ch' + (active ? ' active' : '') + (it.done ? ' done' : '') });
-      card.appendChild(h('div', { class: 'ch-head' }, h('span', { class: 'ch-title', text: `${i + 1}. ${it.title}` }),
+      card.appendChild(h('div', { class: 'ch-head' }, h('span', { class: 'ch-title', text: one ? `도전: ${it.title}` : `${i + 1}. ${it.title}` }),
         h('span', { class: 'ch-badge', text: it.done ? '완료 ✓' : active ? '도전 중' : '시작 전' })));
       card.appendChild(h('p', { class: 'ch-goal', html: it.goal }));
       if (active && !it.done) {
