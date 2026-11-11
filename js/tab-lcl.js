@@ -74,10 +74,10 @@ const LclLab = (function () {
       <ul><li><b style="color:var(--temp)">기온(빨간 점)</b>과 <b style="color:var(--dew)">이슬점(파란 점)</b> 사이가 어떻게 바뀌나요?</li>
       <li>두 점이 만나는 높이와 장면의 <b>구름 바닥</b>이 같은 가로선 위에 있나요?</li></ul>` }), true));
     ui.foldLCL = Fold('상승 응결 고도 구하기', h('div', { html: `
-      <p>불포화 공기는 1 km 오를 때마다 기온이 10 ℃, 이슬점이 2 ℃ 낮아져 두 값의 차이가 <b>8 ℃씩</b> 줄어요. 응결 고도 위에서는 둘 다 5 ℃/km씩 낮아져요.</p>
-      <div class="eq">(T<sub>0</sub> − 10H) = (Td<sub>0</sub> − 2H) &nbsp;→&nbsp; <b>H(km) = (T<sub>0</sub> − Td<sub>0</sub>) / 8</b></div>
+      <p>불포화 공기는 1 km(1000 m) 오를 때마다 기온이 10 ℃, 이슬점이 2 ℃ 낮아져 두 값의 차이가 <b>8 ℃씩</b> 줄어요. 차이 1&nbsp;℃가 줄어드는 데 1000 ÷ 8 = <b>125&nbsp;m</b>가 걸려요.</p>
+      <div class="eq"><b>H(m) = 125 × (T<sub>0</sub> − Td<sub>0</sub>)</b></div>
       <p id="lcl-calc"></p>
-      <p class="note">교과서 그림 Ⅲ-12</p>` }), false);
+      <p class="note">응결 고도 위에서는 기온과 이슬점이 함께 5 ℃/km씩 낮아져요. · 교과서 그림 Ⅲ-12</p>` }), false);
     ui.foldLCL.addEventListener('toggle', () => {
       if (ui.foldLCL.open && st.guided && !st.revealed) { ui.foldLCL.open = false; ui.ro.guide('', '', '먼저 공기를 올려 기온과 이슬점이 같아지는 높이를 찾아보세요. 그 높이에 닿으면 이 설명을 볼 수 있어요.'); }
     });
@@ -98,7 +98,7 @@ const LclLab = (function () {
         goal: '응결 고도가 정확히 <b>2.00 km</b>가 되도록 조건을 정하고, 공기를 올려 구름 바닥을 확인하세요.',
         hints: ['구름 바닥은 기온과 이슬점이 같아지는 높이예요. 지표에서 두 값의 차이를 보세요.',
           '올라갈 때 기온은 10 ℃/km, 이슬점은 2 ℃/km씩 낮아져 차이가 1 km마다 8 ℃씩 줄어요.',
-          'H = (T₀ − Td₀) / 8 → 2.00 km가 되려면 T₀ − Td₀ = 16 ℃'],
+          'H(m) = 125 × (T₀ − Td₀) → 2000 m(2.00 km)가 되려면 T₀ − Td₀ = 16 ℃'],
         check: (lab, since) => lab.since(since, 'reachLCL').some(e => Math.abs(e.H - 2) < 1e-6),
         success: '구름 바닥 2.00 km! 기온과 이슬점의 차이가 16 ℃이면 2 km 올라가야 두 값이 같아져요.'
       }
@@ -421,7 +421,10 @@ const LclLab = (function () {
     renderGuide(p, Hn);
     renderControls();
     const calc = document.getElementById('lcl-calc');
-    if (calc) calc.innerHTML = `지금 조건: H = (${fT(st.T0)} − ${fT(st.Td0)}) / 8 = <b>${fZ(Hn)} km</b>`;
+    if (calc) {
+      const Hm = Math.round(125 * (st.T0 - st.Td0) * 10) / 10;       // m 단위 표시 (계산은 physics.js의 km 값과 같음)
+      calc.innerHTML = `지금 조건: H = 125 × (${fT(st.T0)} − ${fT(st.Td0)}) = <b>${Number.isInteger(Hm) ? Hm : Hm.toFixed(1)} m</b> (${fZ(Hn)} km)`;
+    }
     if (ch) ch.check();
   }
   function renderGuide(p, Hn) {

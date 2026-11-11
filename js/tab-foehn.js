@@ -111,7 +111,7 @@ const FoehnLab = (function () {
         goal: '바람을 보내기 전에 영서 <b>도착 기온</b>을 계산해 입력하고 확정한 뒤, 공기를 도착까지 보내 확인하세요. (±0.5 ℃)',
         hints: ['응결 시작 높이와 정상의 기온을 차례로 구해 보세요.',
           '오를 때: 응결 고도까지 −10 ℃/km, 그 위는 −5 ℃/km. 내려올 때: −(높이)만큼 +10 ℃/km.',
-          'H = (T₀ − Td₀)/8, 정상 기온 = T₀ − 10H − 5(M − H), 도착 기온 = 정상 기온 + 10M (H ≥ M이면 도착 = 출발)'],
+          '응결 고도 H(m) = 125 × (T₀ − Td₀). 정상 기온 = T₀ − 10H − 5(M − H), 도착 기온 = 정상 기온 + 10M (H·M은 km, H ≥ M이면 도착 = 출발)'],
         extra(lab, it, rerender) {
           const inp = h('input', { type: 'number', step: 0.1, value: it.pred != null ? it.pred : '', 'aria-label': '예상 도착 기온' });
           const lock = Btn(it.locked ? '다시 입력' : '예상 확정', 'sm accent', () => {
