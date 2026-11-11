@@ -80,7 +80,7 @@ const LclLab = (function () {
       <p id="lcl-calc"></p>
       <p class="note">교과서 그림 Ⅲ-12 상승 응결 고도</p>` }), false);
     ui.foldLCL.addEventListener('toggle', () => {
-      if (ui.foldLCL.open && st.guided && !st.revealed) { ui.foldLCL.open = false; ui.ro.guide('', '', '먼저 공기를 올려 기온과 이슬점이 같아지는 높이를 찾아보세요. 도달하면 이 설명이 열려요.'); }
+      if (ui.foldLCL.open && st.guided && !st.revealed) { ui.foldLCL.open = false; ui.ro.guide('', '', '먼저 공기를 올려 기온과 이슬점이 같아지는 높이를 찾아보세요. 그 높이에 닿으면 이 설명을 볼 수 있어요.'); }
     });
     m.appendChild(ui.foldLCL);
     m.appendChild(Fold('단열 변화와 모형의 가정', h('div', { html: `
@@ -505,8 +505,8 @@ const LclLab = (function () {
     ui.goLCL.disabled = Math.abs(st.z - Hn) < 1e-9;
     ui.tLCL.el.hidden = st.guided;
     ui.tPath.el.querySelector('span').innerHTML = st.guided ? '전체 경로 보기' : '예상 경로';
-    ui.foldLCL.classList.toggle('locked', st.guided && !st.revealed);
-    ui.foldLCL.querySelector('summary').innerHTML = st.guided && !st.revealed ? '상승 응결 고도 구하기 <span class="tag">🔒 도달하면 열려요</span>' : '상승 응결 고도 구하기';
+    ui.foldLCL.classList.toggle('waiting', st.guided && !st.revealed);
+    ui.foldLCL.querySelector('summary').innerHTML = st.guided && !st.revealed ? '상승 응결 고도 구하기 <span class="tag">응결 고도에 닿은 뒤 볼 수 있어요</span>' : '상승 응결 고도 구하기';
   }
 
   return {

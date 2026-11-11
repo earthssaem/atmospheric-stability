@@ -220,7 +220,7 @@ svg text { font-family: var(--font); }
 .fold-body p { margin: 6px 0; }
 .fold-body ul { margin: 6px 0; padding-left: 20px; }
 .fold-body li { margin: 3px 0; }
-.fold.locked > summary { color: var(--muted); }
+.fold.waiting > summary { color: var(--muted); }
 .note { font-size: 14px; color: var(--muted); }
 .eq { font-variant-numeric: tabular-nums; background: var(--soft); border-radius: 8px; padding: 6px 10px; margin: 6px 0; font-size: 15.5px; }
 table.stage-table { width: 100%; border-collapse: collapse; font-size: 15px; font-variant-numeric: tabular-nums; }
