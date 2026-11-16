@@ -9,7 +9,7 @@
 const StabLab = (function () {
   const ZMAX = 6;
   const DT = 1 / 120;          // 계산 간격 (초)
-  const LIFT = 0.6;            // 강제로 옮기는 속도 (화면 표현용)
+  const LIFT = 0.6;            // 강제로 올리고 내리는 속도 (화면 표현용)
   const MAX_FRAMES = 4800;
   const DEF = { T0: 30, Td0: 14, gamma: 8 };
   const PRESETS = [{ g: 4, label: '4 절대 안정' }, { g: 8, label: '8 조건부 불안정' }, { g: 12, label: '12 절대 불안정' }];
@@ -30,8 +30,8 @@ const StabLab = (function () {
 
   /* ───────── 기록(실행) ─────────
    * frame: {z, v, a, b, phase: 'free' | 'lift' | 'drag' | 'hold', dir: 위(1)·아래(−1)·멈춤(0), note: null | 'ground' | 'top' | 'rest'}
-   *  - lift: 「공기 올리기」·「누르는 동안 위로 옮기기」로 옮기는 중 / drag: 공기 덩어리를 직접 끌어 옮기는 중
-   *  - hold: 사용자가 그 높이에 붙잡아 두고 관찰하는 중 (놓아주기 전까지 그대로) / free: 놓아준 뒤 계산대로 움직임 */
+   *  - lift: 「공기 올리기」·「꾹 눌러 올리기」로 올리거나 내리는 중 / drag: 공기 덩어리를 직접 끌어 움직이는 중
+   *  - hold: 사용자가 그 높이에 붙잡아 두고 관찰하는 중 (놓기 전까지 그대로) / free: 놓은 뒤 계산대로 움직임 */
   function newRun() {
     const P = prof();
     const b = Physics.buoyancy(st.T0, st.Td0, P, 0);
@@ -99,7 +99,7 @@ const StabLab = (function () {
 
   /* ───────── 조작 ───────── */
   function emitHeld(z) { L.emit('lift', { z, sat: z >= H() - 1e-9, key: condKey(), cls: Physics.stabilityClass(st.gamma).key, inv: st.inv.on }); }
-  /** 지금 높이에 붙잡아 두기 (옮기던 중이면 그 자리에서) */
+  /** 지금 높이에 붙잡아 두기 (올리거나 내리던 중이면 그 자리에서) */
   function holdHere() {
     const f0 = cur();
     if (f0.phase !== 'lift' && f0.phase !== 'drag') return;
@@ -108,7 +108,7 @@ const StabLab = (function () {
     emitHeld(f0.z);
     render();
   }
-  /* 공기 덩어리를 직접 끌어 옮기기 (손을 떼면 그 높이에 붙잡아 둠) */
+  /* 공기 덩어리를 직접 끌어 움직이기 (손을 떼면 그 높이에 붙잡아 둠) */
   function dragBegin() {
     truncateToIdx();
     const r = st.run, f0 = cur();
@@ -150,7 +150,7 @@ const StabLab = (function () {
     st.paused = false; st.notice = '';
     render();
   }
-  // 누르는 동안 위로 옮기고, 손을 떼면 그 높이에 붙잡아 둔다 (놓아주기는 따로)
+  // 꾹 누르는 동안 올리고, 손을 떼면 그 높이에 붙잡아 둔다 (놓기는 따로)
   function holdStart() { st.holdBtn = true; liftTo(ZMAX); }
   function holdEnd() { if (!st.holdBtn) return; st.holdBtn = false; if (cur().phase === 'lift') holdHere(); }
   function play() {
@@ -269,13 +269,13 @@ const StabLab = (function () {
     ui.tl.style.setProperty('--c', 'var(--ink)');
     ui.tl.addEventListener('input', () => seek(+ui.tl.value));
     ui.ctrl.slot.append(h('div', { class: 'progress' }, h('span', { class: 'lbl', text: '기록' }), ui.tl));
-    // 공기 덩어리 조작 줄: 옮기기 → (손을 떼면 붙잡아 둠) → 놓아주기
+    // 공기 덩어리 조작 줄: 올리기·내리기 → (손을 떼면 붙잡아 둠) → 놓기
     ui.tz = NumField({ label: '목표 높이', min: 0, max: ZMAX, step: 0.01, decimals: 2, value: st.target, unit: 'km', cls: 'compact', onCommit: v => { st.target = v; render(); } });
     ui.lift = Btn('공기 올리기', 'accent', () => liftTo(st.target));
-    ui.hold = Btn('누르는 동안 위로 옮기기', '', null, { title: '누르고 있는 동안 위로 옮기고, 손을 떼면 그 높이에 붙잡아 둬요 (Space·Enter도 가능)' });
+    ui.hold = Btn('꾹 눌러 올리기', '', null, { title: '누르고 있는 동안 올라가고, 손을 떼면 그 높이에 붙잡아 둬요 (Space·Enter 키도 가능)' });
     holdButton(ui.hold, holdStart, holdEnd);
-    ui.rel = Btn('놓아주기', 'primary', release);
-    ui.relHint = h('span', { class: 'rel-hint', text: '놓아주면 공기 덩어리가 어떻게 움직이는지 관찰하세요.' });
+    ui.rel = Btn('놓기', 'primary', release);
+    ui.relHint = h('span', { class: 'rel-hint', text: '놓으면 공기 덩어리가 어떻게 움직이는지 관찰하세요.' });
     ui.manip = h('div', { class: 'ctrl-bar manip-bar', role: 'group', 'aria-label': '공기 덩어리 조작' },
       h('span', { class: 'manip-title', text: '공기 덩어리' }), ui.tz.el, ui.lift, ui.hold, h('span', { class: 'manip-sep', 'aria-hidden': 'true' }), ui.rel, ui.relHint);
     sh.ctrl.after(ui.manip);
@@ -403,7 +403,7 @@ const StabLab = (function () {
     E.status = txt({ class: 'manip-status halo-sky', 'text-anchor': 'middle' }, '', svg);
     E.envLbls = [...svg.querySelectorAll('text')].filter(t => t.textContent.startsWith('주위 '));
     E.px = W * 0.38;
-    sa(E.parcel.g, { tabindex: 0, role: 'slider', 'aria-label': '공기 덩어리 높이 (끌거나 위·아래 화살표 키로 옮기기)', 'aria-valuemin': 0, 'aria-valuemax': ZMAX });
+    sa(E.parcel.g, { tabindex: 0, role: 'slider', 'aria-label': '공기 덩어리 높이 (끌거나 위·아래 화살표 키로 올리고 내리기)', 'aria-valuemin': 0, 'aria-valuemax': ZMAX });
     const pg = E.parcel.g;
     let pid = null;
     pg.addEventListener('pointerdown', ev => { pid = ev.pointerId; try { pg.setPointerCapture(pid); } catch (e) { /* 무시 */ } ev.preventDefault(); dragBegin(); });
@@ -538,7 +538,7 @@ const StabLab = (function () {
     else sa(E.cmpTrail, { opacity: 0 });
     const rad = 16 + 2.6 * z;
     E.parcel.set(E.px, yz, rad, par.saturated && z > Hn + 1e-9 ? clamp((z - Hn) / 1.5, 0.3, 1) : 0);
-    sa(E.parcel.g, { 'aria-label': `공기 덩어리: 높이 ${fZ(z)} km, 기온 ${fT(par.T)} ℃, 주위 ${fT(env)} ℃ (끌거나 위·아래 화살표 키로 옮기기)` });
+    sa(E.parcel.g, { 'aria-label': `공기 덩어리: 높이 ${fZ(z)} km, 기온 ${fT(par.T)} ℃, 주위 ${fT(env)} ℃ (끌거나 위·아래 화살표 키로 올리고 내리기)` });
     sa(E.sNow, { y1: yz, y2: yz });
     sa(E.sNowBg, { x: f.sceneW - 76, y: yz - 12 }); sa(E.sNowT, { x: f.sceneW - 12, y: yz + 5 }); E.sNowT.textContent = `${fZ(z)} km`;
     const manip = fr.phase === 'lift' || fr.phase === 'drag' || fr.phase === 'hold';
@@ -551,7 +551,7 @@ const StabLab = (function () {
       sa(E.buoyT, { x: x + 14, y: (y1 + y2) / 2 + 5 }); E.buoyT.textContent = b > 0 ? '부력 ↑' : '부력 ↓';
       sa(E.buoy, { opacity: 1 });
     } else sa(E.buoy, { opacity: 0 });
-    // 이동 방향(속도): 자유 운동은 빠르기에 따라, 사용자가 옮기는 중에는 작고 가는 화살표. 붙잡아 둔 동안에는 없음
+    // 이동 방향(속도): 자유 운동은 빠르기에 따라, 사용자가 올리거나 내리는 중에는 작고 가는 화살표. 붙잡아 둔 동안에는 없음
     const userDir = (fr.phase === 'lift' || fr.phase === 'drag') ? fr.dir : 0;
     const moveV = fr.phase === 'free' ? fr.v : 0;
     if (userDir !== 0 || Math.abs(moveV) > 0.02) {
@@ -650,7 +650,7 @@ const StabLab = (function () {
   function placeStatus(f, fr, yz, rad) {
     const t = E.status;
     let text = '';
-    if ((fr.phase === 'lift' || fr.phase === 'drag') && fr.dir !== 0) text = fr.dir > 0 ? '위로 옮기는 중' : '아래로 옮기는 중';
+    if ((fr.phase === 'lift' || fr.phase === 'drag') && fr.dir !== 0) text = fr.dir > 0 ? '올리는 중' : '내리는 중';
     else if (fr.phase === 'hold' || fr.phase === 'drag') text = '이 높이에 붙잡아 둔 상태';
     if (t.textContent !== text) t.textContent = text;
     if (!text) { sa(t, { opacity: 0 }); return; }
@@ -683,7 +683,7 @@ const StabLab = (function () {
     sa(t, { x: pos[0].toFixed(1), y: pos[1].toFixed(1), opacity: 1 });
   }
   function motionText(fr, b) {
-    if ((fr.phase === 'lift' || fr.phase === 'drag') && fr.dir !== 0) return { short: fr.dir > 0 ? '위로 옮김' : '아래로 옮김', sub: '사용자가 옮기는 중' };
+    if ((fr.phase === 'lift' || fr.phase === 'drag') && fr.dir !== 0) return { short: fr.dir > 0 ? '강제 상승' : '강제 하강', sub: fr.dir > 0 ? '직접 올리는 중' : '직접 내리는 중' };
     if (fr.phase === 'hold' || fr.phase === 'drag') return { short: '붙잡아 둠', sub: fr.note === 'top' ? `표시 상한 ${ZMAX} km` : '이 높이에서 관찰 중' };
     if (fr.note === 'top') return { short: '표시 상한', sub: `${ZMAX} km에서 멈춤` };
     if (Math.abs(fr.v) < 0.01) return { short: '정지', sub: fr.note === 'ground' ? '지표' : (Math.abs(b) < 0.05 ? '주위와 같은 기온' : '') };
@@ -694,8 +694,8 @@ const StabLab = (function () {
     const vsTxt = `공기 ${fT(par.T)} ℃ · 주위 ${fT(par.T - b)} ℃`;
     let s1, c1, m;
     if ((fr.phase === 'lift' || fr.phase === 'drag') && fr.dir !== 0) {
-      s1 = '옮기는 중'; c1 = 'neutral';
-      m = `${fr.dir > 0 ? '위로' : '아래로'} 옮기는 중이에요. 옮기는 동안에도 부력은 따로 작용해요. ${vsTxt}`;
+      s1 = fr.dir > 0 ? '올리는 중' : '내리는 중'; c1 = 'neutral';
+      m = `공기 덩어리를 ${fr.dir > 0 ? '올리는' : '내리는'} 중이에요. 그동안에도 부력은 계속 작용해요. ${vsTxt}`;
     } else if (fr.phase === 'hold' || fr.phase === 'drag') {
       s1 = st.paused ? '일시정지' : '붙잡아 둔 상태'; c1 = 'neutral';
       m = (fr.note === 'top' ? `표시 범위(${ZMAX} km)에 붙잡아 두었어요. ` : '이 높이에 붙잡아 두고 관찰하는 중이에요. ') + `${vsTxt}. 부력 화살표를 확인해 보세요.`;
@@ -743,7 +743,7 @@ const StabLab = (function () {
     const isDef = st.T0 === 30 && st.Td0 === 14 && !st.inv.on;
     const add = (label, z, desc) => ui.guideBox.appendChild(h('div', { class: 'exp' }, h('div', null, h('div', { class: 't', html: label }), h('div', { class: 'd', html: desc })),
       Btn(`${fZ(z)} km까지 올리기`, 'sm accent', () => { resetMotion(); st.target = z; ui.tz.set(z); liftTo(z); sh.panel.scrollIntoView({ behavior: REDUCED_MOTION ? 'auto' : 'smooth', block: 'center' }); })));
-    ui.guideBox.appendChild(h('p', { class: 'note', html: '같은 지표 공기(30 ℃ · 14 ℃)를 감률 4 · 8 · 12 ℃/km 대기에서 올려 보세요. 올린 높이에 붙잡아 두었다가 <b>놓아주기</b>로 움직임을 봐요.' }));
+    ui.guideBox.appendChild(h('p', { class: 'note', html: '같은 지표 공기(30 ℃ · 14 ℃)를 감률 4 · 8 · 12 ℃/km 대기에서 올려 보세요. 올린 높이에 붙잡아 두었다가 <b>놓기</b>를 눌러 움직임을 봐요.' }));
     if (!isDef) { ui.guideBox.appendChild(h('p', { class: 'note', text: '안내 실험은 30 ℃ · 14 ℃(역전층 없음)에서 준비돼 있어요. 조건 기본값을 누르면 돌아가요.' })); return; }
     const c = Physics.stabilityClass(st.gamma).key;
     if (c === 'conditional' && Math.abs(st.gamma - 8) < 1e-9) {
@@ -761,9 +761,9 @@ const StabLab = (function () {
     ui.ctrl.setPlay(!st.paused && mv, mv ? '▶ 재생' : '▶ 공기 올리기');
     const keys = [...new Set(r.keys.concat([r.frames.length - 1]))];
     ui.ctrl.setStep(keys.some(k => k < st.idx), keys.some(k => k > st.idx));
-    ui.rel.disabled = fr.phase === 'free';          // 이미 자유롭게 움직이는 중에는 놓아주기 끔
+    ui.rel.disabled = fr.phase === 'free';          // 이미 자유롭게 움직이는 중에는 놓기 끔
     ui.relHint.classList.toggle('show', fr.phase !== 'free');
-    ui.lift.innerHTML = st.target < fr.z - 1e-9 ? '목표로 내리기' : '공기 올리기';
+    ui.lift.innerHTML = st.target < fr.z - 1e-9 ? '공기 내리기' : '공기 올리기';
     ui.lift.disabled = Math.abs(st.target - fr.z) < 1e-9 && fr.phase !== 'free';
     ui.tl.max = Math.max(0, r.frames.length - 1);
     if (document.activeElement !== ui.tl) ui.tl.value = st.idx;
