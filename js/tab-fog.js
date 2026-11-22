@@ -256,7 +256,7 @@ const FogLab = (function () {
    * 정적인 풍경(지형 · 나무 · 집 · 바다)은 조건이 바뀔 때만 그리고, 하늘 · 화살표 · 안개는 매 순간 다시 그린다.
    * 안개는 가장자리가 투명한 둥근 덩어리(radialGradient) 여러 개를 겹쳐 그린다. 생길 때는 지면 쪽부터 서서히 나타나고,
    * 재생을 멈춰도 바람을 따라 천천히 흐른다(「움직임 줄이기」 설정에서는 멈춘 그림). 모든 그림은 정성적 표현. */
-  function sceneGeo(f) { return { W: f.sceneW, yG: f.yOf(0), top: 18, H: f.H }; }
+  function sceneGeo(f) { return { W: f.sceneW, yG: f.yOf(0), top: 18, H: f.H, k: clamp(f.sceneW / 520, 0.7, 1.06) }; }   // k: 집 · 나무 크기 배율(좁은 화면에서 작게)
   const P2 = pts => 'M' + pts.map(p => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' L');
   function smoothLine(pts) {        // 점들을 지나는 부드러운 곡선(카디널 스플라인)
     let d = `M${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
@@ -267,41 +267,111 @@ const FogLab = (function () {
     }
     return d;
   }
+  /** 색 번짐(그라데이션): stops = [[위치 0~1, 색, 불투명도]], user = [x1, y1, x2, y2](화면 좌표) 없으면 도형 크기 기준 위 → 아래 */
+  function grad(defs, id, stops, user, horiz) {
+    const a = user ? { gradientUnits: 'userSpaceOnUse', x1: user[0], y1: user[1], x2: user[2], y2: user[3] } : (horiz ? { x1: 0, y1: 0, x2: 1, y2: 0 } : { x1: 0, y1: 0, x2: 0, y2: 1 });
+    const gr = s('linearGradient', Object.assign({ id }, a), defs);
+    stops.forEach(([o, c, op]) => s('stop', { offset: o, 'stop-color': c, 'stop-opacity': op == null ? 1 : op }, gr));
+    return `url(#${id})`;
+  }
+  const N1 = v => +v.toFixed(1);
+  /** 부드러운 윗선을 가진 땅: pts를 지나는 곡선 아래를 bottom까지 채움 (hi: 윗선에 옅은 빛) */
+  function land(parent, pts, bottom, fill, hi, hiOp) {
+    const d = smoothLine(pts), a = pts[0], b = pts[pts.length - 1];
+    s('path', { d: d + ` L${N1(b[0])} ${bottom} L${N1(a[0])} ${bottom} Z`, fill }, parent);
+    if (hi) s('path', { d, fill: 'none', stroke: hi, 'stroke-width': 1.6, 'stroke-linecap': 'round', opacity: hiOp == null ? 0.6 : hiOp }, parent);
+  }
   /** 능선: x0~x1 사이 봉우리가 여러 개인 산줄기 (아래는 bottom까지 채움) */
-  function ridge(parent, x0, x1, yBase, amp, seed, fill, bottom, n) {
+  function ridge(parent, x0, x1, yBase, amp, seed, fill, bottom, n, hi, hiOp) {
     const R = rng(seed), pts = [];
     n = n || 9;
-    for (let i = 0; i <= n; i++) pts.push([lerp(x0, x1, i / n), yBase - amp * (0.35 + 0.65 * R())]);
-    return s('path', { d: smoothLine(pts) + ` L${x1} ${bottom} L${x0} ${bottom} Z`, fill }, parent);
+    for (let i = 0; i <= n; i++) pts.push([lerp(x0, x1, i / n), yBase - amp * (0.3 + 0.7 * R())]);
+    land(parent, pts, bottom, fill, hi, hiOp);
+    return pts;
   }
-  function pine(parent, x, yb, hgt, fill, trunk) {
-    const w = hgt * 0.42;
-    s('rect', { x: x - hgt * 0.04, y: yb - hgt * 0.18, width: hgt * 0.08, height: hgt * 0.18, fill: trunk || '#5A4632' }, parent);
+  /** 침엽수: 세 층의 가지, 왼쪽 절반은 밝은 색(빛 받는 쪽) */
+  function pine(parent, x, yb, hgt, dark, light, trunk) {
+    const w = hgt * 0.4;
+    s('rect', { x: N1(x - hgt * 0.035), y: N1(yb - hgt * 0.16), width: N1(hgt * 0.07), height: N1(hgt * 0.17), fill: trunk || '#5A4632' }, parent);
     for (let k = 0; k < 3; k++) {
-      const y0 = yb - hgt * (0.12 + k * 0.26), y1 = y0 - hgt * 0.42, ww = w * (1 - k * 0.22);
-      s('path', { d: `M${x - ww} ${y0} L${x} ${y1} L${x + ww} ${y0} Z`, fill }, parent);
+      const y0 = yb - hgt * (0.1 + k * 0.25), y1 = k === 2 ? yb - hgt : y0 - hgt * 0.44, ww = w * (1 - k * 0.24), sag = ww * 0.24;
+      s('path', { d: `M${N1(x - ww)} ${N1(y0)} Q${N1(x)} ${N1(y0 + sag)} ${N1(x + ww)} ${N1(y0)} L${N1(x)} ${N1(y1)} Z`, fill: dark }, parent);
+      if (light) s('path', { d: `M${N1(x - ww)} ${N1(y0)} Q${N1(x - ww * 0.5)} ${N1(y0 + sag * 0.75)} ${N1(x)} ${N1(y0 + sag * 0.5)} L${N1(x)} ${N1(y1)} Z`, fill: light }, parent);
     }
   }
-  function roundTree(parent, x, yb, hgt, fill) {
-    s('rect', { x: x - hgt * 0.05, y: yb - hgt * 0.42, width: hgt * 0.1, height: hgt * 0.42, fill: '#6A5236' }, parent);
-    s('circle', { cx: x, cy: yb - hgt * 0.66, r: hgt * 0.32, fill }, parent);
-    s('circle', { cx: x - hgt * 0.18, cy: yb - hgt * 0.54, r: hgt * 0.22, fill }, parent);
-    s('circle', { cx: x + hgt * 0.18, cy: yb - hgt * 0.56, r: hgt * 0.22, fill }, parent);
+  /** 활엽수: 둥근 잎 덩어리 + 빛 받는 쪽 */
+  function roundTree(parent, x, yb, hgt, dark, light, trunk) {
+    s('path', { d: `M${N1(x - hgt * 0.05)} ${yb} L${N1(x - hgt * 0.03)} ${N1(yb - hgt * 0.5)} L${N1(x + hgt * 0.03)} ${N1(yb - hgt * 0.5)} L${N1(x + hgt * 0.05)} ${yb} Z`, fill: trunk || '#6A5236' }, parent);
+    [[0, 0.66, 0.33], [-0.21, 0.52, 0.23], [0.21, 0.54, 0.24]].forEach(([dx, dy, r]) => s('circle', { cx: N1(x + hgt * dx), cy: N1(yb - hgt * dy), r: N1(hgt * r), fill: dark }, parent));
+    if (light) [[-0.08, 0.74, 0.2], [-0.24, 0.56, 0.13], [0.13, 0.62, 0.12]].forEach(([dx, dy, r]) => s('circle', { cx: N1(x + hgt * dx), cy: N1(yb - hgt * dy), r: N1(hgt * r), fill: light }, parent));
   }
-  function bareTree(parent, x, yb, hgt, color) {
-    const st2 = { stroke: color, 'stroke-linecap': 'round', fill: 'none' };
-    s('path', Object.assign({ d: `M${x} ${yb} L${x} ${yb - hgt}`, 'stroke-width': hgt * 0.07 }, st2), parent);
-    [[0.45, -1], [0.6, 1], [0.75, -1], [0.85, 1]].forEach(([t, d]) => s('path', Object.assign({ d: `M${x} ${yb - hgt * t} l${d * hgt * 0.28} ${-hgt * 0.22}`, 'stroke-width': hgt * 0.035 }, st2), parent));
+  /** 잎이 진 나무: 줄기에서 가지가 갈라져 나감 */
+  function bareTree(parent, x, yb, hgt, color, seed) {
+    const R = rng(seed || 3);
+    (function br(x0, y0, ang, len, w, depth) {
+      const x1 = x0 + Math.cos(ang) * len, y1 = y0 - Math.sin(ang) * len;
+      s('path', { d: `M${N1(x0)} ${N1(y0)} L${N1(x1)} ${N1(y1)}`, stroke: color, 'stroke-width': N1(w), 'stroke-linecap': 'round', fill: 'none' }, parent);
+      if (depth > 0) [[-1, 0.5], [1, 0.82], [-0.55, 1]].forEach(([sd, at], i) => { if (i === 2 && depth < 2) return; br(lerp(x0, x1, at), lerp(y0, y1, at), ang + sd * (0.5 + 0.25 * R()), len * (0.56 + 0.1 * R()), w * 0.6, depth - 1); });
+    })(x, yb, Math.PI / 2 + (R() - 0.5) * 0.12, hgt * 0.52, hgt * 0.075, 3);
   }
-  function house(parent, x, yb, w, hgt, wall, roof, lit) {
-    s('rect', { x: x - w / 2, y: yb - hgt, width: w, height: hgt, fill: wall }, parent);
-    s('path', { d: `M${x - w / 2 - 3} ${yb - hgt} L${x} ${yb - hgt - w * 0.42} L${x + w / 2 + 3} ${yb - hgt} Z`, fill: roof }, parent);
-    s('rect', { x: x - w * 0.22, y: yb - hgt * 0.68, width: w * 0.2, height: hgt * 0.3, fill: lit ? '#FFD98A' : '#8FA9BF' }, parent);
-    s('rect', { x: x + w * 0.08, y: yb - hgt * 0.68, width: w * 0.2, height: hgt * 0.3, fill: lit ? '#FFD98A' : '#8FA9BF' }, parent);
+  /** 집: o = { wall, roof, shade(지붕 · 문의 어두운 색), lit(창에 불빛), hip(옆으로 긴 지붕), chimney } */
+  function house(parent, x, yb, w, hgt, o) {
+    const x0 = x - w / 2, rh = w * (o.hip ? 0.3 : 0.42), ov = w * 0.1, yt = yb - hgt;
+    if (o.lit) s('ellipse', { cx: x, cy: N1(yb - hgt * 0.4), rx: N1(w * 1.25), ry: N1(hgt * 1.5), fill: 'url(#fogWin)' }, parent);
+    if (o.chimney) s('rect', { x: N1(x + w * 0.2), y: N1(yt - rh * 0.95), width: N1(w * 0.13), height: N1(rh * 0.8), fill: o.shade }, parent);
+    s('rect', { x: N1(x0), y: N1(yt), width: N1(w), height: N1(hgt), fill: o.wall }, parent);
+    s('rect', { x: N1(x0), y: N1(yt), width: N1(w), height: N1(Math.max(1.5, hgt * 0.12)), fill: '#000', opacity: 0.16 }, parent);            // 처마 그늘
+    s('path', { d: o.hip ? `M${N1(x0 - ov)} ${N1(yt)} L${N1(x0 + w * 0.2)} ${N1(yt - rh)} L${N1(x0 + w * 0.8)} ${N1(yt - rh)} L${N1(x0 + w + ov)} ${N1(yt)} Z` : `M${N1(x0 - ov)} ${N1(yt)} L${N1(x)} ${N1(yt - rh)} L${N1(x0 + w + ov)} ${N1(yt)} Z`, fill: o.roof }, parent);
+    s('path', { d: `M${N1(x0 - ov)} ${N1(yt)} L${N1(x0 + w + ov)} ${N1(yt)}`, stroke: o.shade, 'stroke-width': 1.6, 'stroke-linecap': 'round' }, parent);
+    const win = o.lit ? '#FFD98A' : '#A9C0D2';
+    s('rect', { x: N1(x0 + w * 0.13), y: N1(yb - hgt * 0.7), width: N1(w * 0.22), height: N1(hgt * 0.36), fill: win, rx: 1 }, parent);
+    s('rect', { x: N1(x0 + w * 0.68), y: N1(yb - hgt * 0.7), width: N1(w * 0.2), height: N1(hgt * 0.36), fill: win, rx: 1 }, parent);
+    s('rect', { x: N1(x0 + w * 0.43), y: N1(yb - hgt * 0.56), width: N1(w * 0.16), height: N1(hgt * 0.56), fill: o.shade, rx: 1 }, parent);
   }
-  function building(parent, x, yb, w, hgt, fill) {
-    s('rect', { x, y: yb - hgt, width: w, height: hgt, fill }, parent);
-    for (let yy = yb - hgt + 7; yy < yb - 8; yy += 10) for (let xx = x + 5; xx < x + w - 5; xx += 9) s('rect', { x: xx, y: yy, width: 4, height: 5, fill: '#DCE7EF', opacity: 0.85 }, parent);
+  /** 도시 건물: 밝은 앞면 + 그늘진 옆면 + 창문 */
+  function building(parent, x, yb, w, hgt, face, side, seed, winOp) {
+    const R = rng(seed), sw = w * 0.26;
+    s('rect', { x: N1(x), y: N1(yb - hgt), width: N1(w), height: N1(hgt), fill: face }, parent);
+    s('rect', { x: N1(x + w - sw), y: N1(yb - hgt), width: N1(sw), height: N1(hgt), fill: side }, parent);
+    s('rect', { x: N1(x - 1), y: N1(yb - hgt - 2.5), width: N1(w + 2), height: 3, fill: side }, parent);                                            // 옥상 테두리
+    if (R() > 0.45) s('rect', { x: N1(x + w * 0.25), y: N1(yb - hgt - 8), width: N1(w * 0.3), height: 6, fill: side }, parent);                    // 옥탑
+    else s('line', { x1: N1(x + w * 0.4), x2: N1(x + w * 0.4), y1: N1(yb - hgt - 2), y2: N1(yb - hgt - 13), stroke: side, 'stroke-width': 1.4 }, parent);
+    for (let yy = yb - hgt + 6; yy < yb - 7; yy += 8.5) for (let xx = x + 3.5; xx < x + w - sw - 3; xx += 6.5) s('rect', { x: N1(xx), y: N1(yy), width: 3.6, height: 4.6, fill: R() > 0.8 ? '#FFE7A8' : '#EEF5FA', opacity: winOp == null ? 0.9 : winOp }, parent);
+  }
+  function lighthouse(parent, x, yb, hgt) {
+    const w0 = hgt * 0.15, w1 = hgt * 0.095, yt = yb - hgt * 0.74;
+    s('path', { d: `M${N1(x - w0)} ${yb} L${N1(x - w1)} ${N1(yt)} L${N1(x + w1)} ${N1(yt)} L${N1(x + w0)} ${yb} Z`, fill: '#FAFAF7' }, parent);
+    s('path', { d: `M${N1(x + w0 * 0.25)} ${yb} L${N1(x + w1 * 0.25)} ${N1(yt)} L${N1(x + w1)} ${N1(yt)} L${N1(x + w0)} ${yb} Z`, fill: '#D5DADF' }, parent);   // 그늘진 쪽
+    [0.2, 0.5].forEach(t => { const y0 = lerp(yb, yt, t), y1 = lerp(yb, yt, t + 0.15), a = lerp(w0, w1, t), b = lerp(w0, w1, t + 0.15); s('path', { d: `M${N1(x - a)} ${N1(y0)} L${N1(x - b)} ${N1(y1)} L${N1(x + b)} ${N1(y1)} L${N1(x + a)} ${N1(y0)} Z`, fill: '#C9483B' }, parent); });
+    s('rect', { x: N1(x - w1 * 1.5), y: N1(yt - 2.5), width: N1(w1 * 3), height: 2.5, fill: '#56606A' }, parent);                                  // 난간
+    s('rect', { x: N1(x - w1 * 0.85), y: N1(yt - hgt * 0.15), width: N1(w1 * 1.7), height: N1(hgt * 0.15 - 2), fill: '#FFE9A6' }, parent);         // 등
+    s('path', { d: `M${N1(x - w1 * 1.2)} ${N1(yt - hgt * 0.15)} L${N1(x)} ${N1(yb - hgt)} L${N1(x + w1 * 1.2)} ${N1(yt - hgt * 0.15)} Z`, fill: '#C9483B' }, parent);
+  }
+  /** 뭉게구름 (밑면 y) */
+  function cumulus(parent, cx, y, r, op) {
+    return cloudShape(parent, { x0: cx - r * 2.5, y0: y - r * 1.95, x1: cx + r * 2.5, y1: y }, c => {
+      c.rect(cx - r * 2, y - r * 0.72, r * 4, r * 0.72, r * 0.36);
+      c.circle(cx - r * 1.2, y - r * 0.6, r * 0.6); c.circle(cx - r * 0.35, y - r * 0.98, r * 0.92); c.circle(cx + r * 0.72, y - r * 0.78, r * 0.74); c.circle(cx + r * 1.5, y - r * 0.5, r * 0.5);
+    }, op);
+  }
+  /** 비구름: 윗면은 울퉁불퉁, 아래로 갈수록 어두운 두꺼운 구름 */
+  function rainCloud(parent, defs, x0, x1, yTop, yBase) {
+    const id = uid('frc'), cp = s('clipPath', { id }, defs), R = rng(31), hgt = yBase - yTop;
+    const add = (cx, cy, r) => s('circle', { cx: N1(cx), cy: N1(cy), r: N1(r) }, cp);
+    s('rect', { x: N1(x0 + 24), y: N1(yTop + 18), width: N1(x1 - x0), height: N1(Math.max(8, hgt - 30)), rx: 14 }, cp);
+    for (let x = x0 + 14; x <= x1 + 24; x += 25) add(x + R() * 8, yTop + 24 + 7 * Math.sin((x - x0) * 0.021), 20 + R() * 13);    // 윗면
+    for (let x = x0 + 34; x <= x1 + 20; x += 19) add(x + R() * 6, yBase - 13 - R() * 3, 10 + R() * 5);                               // 밑면
+    add(x0 + 16, yTop + hgt * 0.5, hgt * 0.22); add(x0 + 30, yTop + hgt * 0.34, hgt * 0.24); add(x0 + 34, yTop + hgt * 0.7, hgt * 0.17);   // 왼쪽 끝
+    const fill = grad(defs, id + 'g', [[0, '#F7F9FB'], [0.4, '#DCE2E8'], [0.75, '#AEB8C3'], [1, '#8792A0']], [0, yTop - 6, 0, yBase]);
+    const gg = s('g', { 'clip-path': `url(#${id})` }, parent);
+    s('rect', { x: N1(x0 - 40), y: N1(yTop - 40), width: N1(x1 - x0 + 90), height: N1(hgt + 80), fill }, gg);
+    for (let i = 0; i < 7; i++) s('ellipse', { cx: N1(lerp(x0, x1, (i + R()) / 7)), cy: N1(yTop + hgt * (0.4 + 0.25 * R())), rx: N1(40 + R() * 34), ry: N1(hgt * 0.2), fill: 'url(#fogPuff)', opacity: 0.55 }, gg);   // 속 덩어리의 밝은 쪽
+    return gg;
+  }
+  /** 풀 포기 */
+  function tufts(parent, x0, x1, y, n, color, seed) {
+    const R = rng(seed);
+    for (let i = 0; i < n; i++) { const x = lerp(x0, x1, (i + R()) / n), hh = 4 + R() * 4; s('path', { d: `M${N1(x - 3)} ${N1(y)} l1.5 ${N1(-hh)} l1.5 ${N1(hh * 0.7)} l1.5 ${N1(-hh * 1.1)} l1.5 ${N1(hh * 1.1)}`, fill: 'none', stroke: color, 'stroke-width': 1.3, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, parent); }
   }
   const smooth = x => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
   const frac = x => x - Math.floor(x);
@@ -396,11 +466,11 @@ const FogLab = (function () {
     return { x0, yR, yAt: x => lerp(g.yG, yR, (x - x0) / (g.W - x0)), ang: Math.atan2(yR - g.yG, g.W - x0) * 180 / Math.PI };
   }
   // 복사 안개 골짜기 모양: 양쪽 언덕 사이 평평한 바닥
-  const valley = g => ({ l: g.W * 0.3, r: g.W * 0.7, hl: x => g.yG - Math.max(0, (g.W * 0.3 - x) / (g.W * 0.3)) * 125, hr: x => g.yG - Math.max(0, (x - g.W * 0.7) / (g.W * 0.3)) * 115 });
+  const valley = g => ({ l: g.W * 0.3, r: g.W * 0.7, hl: x => g.yG - Math.pow(clamp((g.W * 0.3 - x) / (g.W * 0.3), 0, 1), 1.3) * 128, hr: x => g.yG - Math.pow(clamp((x - g.W * 0.7) / (g.W * 0.3), 0, 1), 1.3) * 116 });   // 기슭은 완만하고 위로 갈수록 가파른 언덕
 
   function buildScene(f) {
     const svg = sh.sceneSvg; clear(svg);
-    const g = sceneGeo(f), W = g.W, yG = g.yG;
+    const g = sceneGeo(f), W = g.W, yG = g.yG, HH = g.H, k = g.k;
     const defs = s('defs', null, svg);
     E.skyG = s('linearGradient', { id: 'fogsky', x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
     E.sky0 = s('stop', { offset: '0%' }, E.skyG); E.sky1 = s('stop', { offset: '100%' }, E.skyG);
@@ -410,7 +480,13 @@ const FogLab = (function () {
     [['0%', 0.6], ['55%', 0.38], ['100%', 0]].forEach(([o, op]) => s('stop', { offset: o, 'stop-color': '#8FA3B8', 'stop-opacity': op }, shade));
     const glow = s('radialGradient', { id: 'fogSun' }, defs);
     [['0%', '#FFF6D8', 1], ['45%', '#FFE2A0', 0.8], ['100%', '#FFD08A', 0]].forEach(([o, c, op]) => s('stop', { offset: o, 'stop-color': c, 'stop-opacity': op }, glow));
-    s('rect', { x: 0, y: 0, width: W, height: g.H, fill: 'url(#fogsky)' }, svg);
+    const moonGlow = s('radialGradient', { id: 'fogMoon' }, defs);
+    [['0%', '#DCE6FF', 0.55], ['40%', '#B9C8F0', 0.2], ['100%', '#B9C8F0', 0]].forEach(([o, c, op]) => s('stop', { offset: o, 'stop-color': c, 'stop-opacity': op }, moonGlow));
+    const winGlow = s('radialGradient', { id: 'fogWin' }, defs);
+    [['0%', '#FFD98A', 0.42], ['100%', '#FFD98A', 0]].forEach(([o, c, op]) => s('stop', { offset: o, 'stop-color': c, 'stop-opacity': op }, winGlow));
+    grad(defs, 'fogHeat', [[0, '#FF9A63'], [1, '#F0834B', 0.25]]);                                         // 복사 화살표: 아래로 갈수록 옅게
+    grad(defs, 'fogVap', [[0, '#8CC4E0'], [1, '#8CC4E0', 0.2]]);
+    s('rect', { x: 0, y: 0, width: W, height: HH, fill: 'url(#fogsky)' }, svg);
     E.back = s('g', null, svg);      // 하늘: 별 · 달 · 해 · 구름 (매 순간)
     E.stat = s('g', null, svg);      // 풍경 (조건이 바뀔 때만)
     E.dyn = s('g', null, svg);       // 화살표 · 빗방울 · 물결 (매 순간)
@@ -422,72 +498,135 @@ const FogLab = (function () {
     E.clockT = txt({ x: 22, y: 43, class: 'lb', fill: '#F4F6FA' }, '', E.clock);
     E.clockLast = null;
     const S0 = E.stat;
+    const haze = (id, color, op, hgt) => s('rect', { x: 0, y: yG - hgt, width: W, height: hgt, fill: grad(defs, id, [[0, color, 0], [1, color, op]], [0, yG - hgt, 0, yG]) }, S0);   // 지평선 가까이의 옅은 빛
     if (st.kind === 'radiation') {
+      /* 맑은 밤의 골짜기 마을: 겹겹의 먼 산 · 양쪽 언덕 · 불 켜진 집 */
       const v = valley(g);
-      ridge(S0, -10, W + 10, yG - 150, 70, 4, '#25345A', g.H, 8);               // 먼 산
-      ridge(S0, -10, W + 10, yG - 105, 40, 9, '#2C3F5E', g.H, 10);
+      const r1 = clamp((yG - g.top) * 0.46, 150, 250), r2 = clamp((yG - g.top) * 0.32, 104, 170);          // 세로로 긴 화면에서는 산도 높게
+      ridge(S0, -10, W + 10, yG - r1, 74, 4, grad(defs, 'fgR1', [[0, '#25376A'], [1, '#33497E']], [0, yG - r1 - 78, 0, yG - 40]), HH, 8);
+      ridge(S0, -10, W + 10, yG - r2, 46, 9, grad(defs, 'fgR2', [[0, '#1B2A52'], [1, '#2C4172']], [0, yG - r2 - 56, 0, yG - 10]), HH, 10);
+      haze('fgRh', '#7C93C4', 0.3, 64);
       const hillL = [], hillR = [];
-      for (let x = 0; x <= v.l + 1; x += v.l / 12) hillL.push([x, v.hl(x)]);
-      for (let x = v.r; x <= W + 1; x += (W - v.r) / 12) hillR.push([x, v.hr(x)]);
-      s('path', { d: P2([[0, g.H], ...hillL, [v.l, yG], [v.r, yG], ...hillR, [W, g.H]]) + ' Z', fill: '#2E4636' }, S0);
-      s('rect', { x: 0, y: yG, width: W, height: g.H - yG, fill: '#33503C' }, S0);
-      s('path', { d: `M${v.l + 10} ${yG + 30} C${W * 0.42} ${yG + 6} ${W * 0.56} ${yG + 44} ${v.r - 6} ${yG + 18}`, fill: 'none', stroke: '#5B6B78', 'stroke-width': 6, opacity: 0.7 }, S0);   // 길
-      [[0.05, 0.6], [0.1, 0.7], [0.16, 0.8], [0.22, 0.75], [0.84, 0.75], [0.9, 0.7], [0.95, 0.62]].forEach(([t, k]) => { const x = W * t; pine(S0, x, x < W / 2 ? v.hl(x) + 2 : v.hr(x) + 2, 36 * k, '#1D3326', '#2A2A22'); });
-      [[0.37, 22, 16], [0.44, 26, 18], [0.6, 24, 17], [0.66, 20, 15]].forEach(([t, w, hh]) => house(S0, W * t, yG + 2, w, hh, '#3A4658', '#24303F', true));
+      for (let i = 0; i <= 14; i++) { const x = v.l * i / 14; hillL.push([x, v.hl(x)]); }
+      for (let i = 0; i <= 14; i++) { const x = v.r + (W - v.r) * i / 14; hillR.push([x, v.hr(x)]); }
+      const hillFill = grad(defs, 'fgHill', [[0, '#34513F'], [1, '#22362A']], [0, yG - 130, 0, yG + 10]);
+      s('path', { d: P2([[0, HH], ...hillL, [v.l, HH]]) + ' Z', fill: hillFill }, S0);
+      s('path', { d: P2([[v.r, HH], ...hillR, [W, HH]]) + ' Z', fill: hillFill }, S0);
+      s('path', { d: P2(hillL), fill: 'none', stroke: '#6F9A84', 'stroke-width': 1.6, opacity: 0.45 }, S0);     // 달빛 받는 능선
+      s('path', { d: P2(hillR), fill: 'none', stroke: '#6F9A84', 'stroke-width': 1.6, opacity: 0.3 }, S0);
+      s('rect', { x: 0, y: yG, width: W, height: HH - yG, fill: grad(defs, 'fgField', [[0, '#35543F'], [1, '#20342A']]) }, S0);                                        // 골짜기 바닥(들판)
+      s('path', { d: `M0 ${yG} L${W} ${yG}`, stroke: '#4E7560', 'stroke-width': 1.4, opacity: 0.6 }, S0);
+      for (let i = 0; i < 5; i++) { const x = W * (0.33 + 0.085 * i); s('path', { d: `M${N1(x)} ${yG + 8} L${N1(x - 26 + i * 13)} ${HH}`, stroke: '#4B6E57', 'stroke-width': 1, opacity: 0.28 }, S0); }   // 밭고랑
+      s('path', { d: `M${N1(W * 0.52)} ${yG + 3} C${N1(W * 0.49)} ${yG + 16} ${N1(W * 0.57)} ${yG + 24} ${N1(W * 0.53)} ${yG + 38} S${N1(W * 0.5)} ${HH - 4} ${N1(W * 0.56)} ${HH}`, fill: 'none', stroke: '#7D95B5', 'stroke-width': 5 * k, 'stroke-linecap': 'round', opacity: 0.55 }, S0);   // 달빛 비치는 개울
+      // 언덕의 나무: 뒤쪽은 작고 어둡게, 앞쪽은 크게
+      [[0.03, 0.55, 14], [0.08, 0.62, 6], [0.13, 0.7, 12], [0.19, 0.78, 4], [0.245, 0.72, 9], [0.76, 0.7, 8], [0.81, 0.78, 3], [0.87, 0.72, 12], [0.92, 0.64, 5], [0.97, 0.56, 13]].forEach(([tx, kk, dy]) => { const x = W * tx; pine(S0, x, (x < W / 2 ? v.hl(x) : v.hr(x)) + dy, 38 * kk * k, '#17291F', '#27402F', '#1E1E18'); });
+      [[0.295, 22], [0.455, 17], [0.705, 23]].forEach(([tx, hh]) => roundTree(S0, W * tx, yG + 3, hh * k, '#1B2F24', '#2A4432', '#1E1E18'));
+      // 마을: 불 켜진 창
+      const HS = { wall: '#46536A', roof: '#27324A', shade: '#1B2436', lit: true };
+      [[0.325, 21, 15, 0], [0.373, 26, 19, 2], [0.628, 27, 18, 1], [0.678, 20, 15, 0]].forEach(([tx, w, hh, kind]) => house(S0, W * tx, yG + 3, w * k, hh * k, Object.assign({}, HS, { hip: kind === 1, chimney: kind === 2 })));
+      tufts(S0, 0, W, HH - 1, Math.round(W / 34), '#1A2B22', 12);
     } else if (st.kind === 'advection') {
-      const xs = X('advection', 0.35), xc = W * 0.8;
-      const sea = s('linearGradient', { id: 'fogsea', x1: 0, y1: 0, x2: 1, y2: 0 }, defs);
-      [['0%', '#3FA39A'], [(xs / W * 100).toFixed(0) + '%', '#3E9C98'], [((xs / W + 0.14) * 100).toFixed(0) + '%', '#2A6A9C'], ['100%', '#1F5786']].forEach(([o, c]) => s('stop', { offset: o, 'stop-color': c }, sea));
-      ridge(S0, xc - 40, W + 10, yG - 70, 40, 3, '#8BA48A', yG, 5);                // 해안 뒤 언덕
-      [[0.82, 16, 70, '#C8D2DA'], [0.855, 18, 92, '#B7C3CD'], [0.895, 15, 60, '#D3DBE1'], [0.925, 20, 104, '#AFBCC7'], [0.965, 16, 76, '#C2CDD6']].forEach(([t, w, hh, c]) => building(S0, W * t, yG - 10, w, hh, c));
-      s('path', { d: `M${xc - 6} ${yG} Q${xc + 20} ${yG - 12} ${W} ${yG - 12} L${W} ${g.H} L${xc - 6} ${g.H} Z`, fill: '#E2CFA2' }, S0);   // 모래사장
-      s('rect', { x: 0, y: yG, width: xc, height: g.H - yG, fill: 'url(#fogsea)' }, S0);
+      /* 따뜻한 바다 → 차가운 바다 → 해안 도시 */
+      const xs = X('advection', 0.35), xc = W * 0.8, yL = yG - 9;
+      haze('fgAh', '#FFFFFF', 0.55, 90);
+      // 먼 곶과 뒷산
+      land(S0, [[xc - 46, yG], [xc - 20, yG - 22 * k], [xc + W * 0.05, yG - 52 * k], [xc + W * 0.11, yG - 46 * k], [W + 10, yG - 74 * k]], yG, grad(defs, 'fgAhill', [[0, '#8FB08B'], [1, '#7FA286']], [0, yG - 80 * k, 0, yG]), '#B8D2B0', 0.7);
+      // 도시: 뒷줄은 옅게, 앞줄은 또렷하게
+      [[0.845, 15, 78, 1], [0.895, 17, 100, 2], [0.945, 15, 84, 3]].forEach(([tx, w, hh, sd]) => building(S0, W * tx, yL, w * k, hh * k, '#C9D6E0', '#B4C3D0', sd, 0.5));
+      [[0.825, 16, 52, 4], [0.865, 18, 72, 5], [0.915, 16, 58, 6], [0.955, 20, 90, 7]].forEach(([tx, w, hh, sd]) => building(S0, W * tx, yL, w * k, hh * k, '#E6EDF2', '#C3CED8', sd));
+      [0.812, 0.9, 0.985].forEach(tx => roundTree(S0, W * tx, yL + 1, 15 * k, '#5E8A5A', '#7DA873'));
+      // 모래사장: 물속으로 완만하게 이어짐
+      const bed = `C${N1(xc - 8)} ${yG + 7} ${N1(xc - 34)} ${yG + 26} ${N1(xc - 78)} ${HH}`;                 // 물속으로 이어지는 모래 비탈
+      s('path', { d: `M${N1(xc - 80)} ${HH} L${N1(xc - 40)} ${yG + 20} L${N1(xc + 6)} ${yG - 3} Q${N1(xc + 30)} ${yL} ${W} ${yL} L${W} ${HH} Z`, fill: grad(defs, 'fgSand', [[0, '#EBDDB6'], [1, '#D6C08E']]) }, S0);
+      // 바다: 따뜻한 쪽(청록)에서 차가운 쪽(짙은 파랑)으로
+      const sea = grad(defs, 'fogsea', [[0, '#49ADA2'], [xs / xc, '#41A09B'], [Math.min(0.98, xs / xc + 0.16), '#2B6EA2'], [1, '#225C8E']], [0, 0, xc, 0]);
+      const seaD = `M0 ${yG} L${N1(xc + 5)} ${yG} ${bed} L0 ${HH} Z`;
+      s('path', { d: seaD, fill: sea }, S0);
+      s('path', { d: seaD, fill: grad(defs, 'fgDeep', [[0, '#0B2A4A', 0], [1, '#0B2A4A', 0.38]]) }, S0);                                           // 깊을수록 어둡게
+      s('path', { d: `M0 ${yG + 0.8} L${N1(xc + 3)} ${yG + 0.8}`, stroke: '#EAF8F8', 'stroke-width': 1.8, opacity: 0.75 }, S0);                    // 수면의 밝은 선
+      s('path', { d: `M${N1(xc - 12)} ${yG + 4} q6 -4 12 -3 t10 -3`, fill: 'none', stroke: '#FFFFFF', 'stroke-width': 2, 'stroke-linecap': 'round', opacity: 0.8 }, S0);   // 밀려온 물결
+      lighthouse(S0, xc + 14 * k, yG - 5, 50 * k);
       lbl(S0, xs / 2, yG + 26, '따뜻한 바다', '#FFFFFF', { 'text-anchor': 'middle', class: 'lb-sm', stroke: 'none' });
       lbl(S0, (xs + xc) / 2, yG + 26, '차가운 바다', '#FFFFFF', { 'text-anchor': 'middle', class: 'lb-sm', stroke: 'none' });
     } else if (st.kind === 'upslope') {
-      const geo = slopeGeo(g);
-      ridge(S0, -10, W + 10, yG - (yG - g.top) * 0.62, 50, 6, '#B8C8D6', g.H, 7);     // 먼 산줄기
-      const peak = [geo.x1, geo.yZ(st.M)];
-      s('path', { d: P2([[0, g.H], [0, yG], [geo.x0, yG], peak, [W, lerp(peak[1], yG, 0.75)], [W, g.H]]) + ' Z', fill: '#6F9061' }, S0);
-      s('path', { d: P2([[geo.x0, yG], peak, [peak[0] - 18, peak[1] + 30], [geo.x0 + 40, yG]]) + ' Z', fill: '#7FA06E', opacity: 0.6 }, S0);   // 사면 밝은 쪽
-      for (let i = 1; i <= 9; i++) { const t = i / 10, x = lerp(geo.x0, geo.x1, t), y = lerp(yG, peak[1], t); pine(S0, x - 6, y + 4, 22 + 8 * (1 - t), '#2F5A35'); }
-      for (let i = 0; i < 4; i++) roundTree(S0, W * (0.03 + 0.05 * i), yG + 2, 26, '#4F7A45');
-      house(S0, W * 0.2, yG + 1, 22, 15, '#E8DCC8', '#A3553E', false);
+      /* 산 사면: 겹겹의 먼 산줄기 · 빛 받는 사면과 그늘진 뒤쪽 */
+      const geo = slopeGeo(g), sky = yG - g.top, peak = [geo.x1, geo.yZ(st.M)];
+      ridge(S0, -10, W + 10, yG - sky * 0.6, 48, 6, grad(defs, 'fgU1', [[0, '#A9BDD2'], [1, '#D5E2EC']], [0, yG - sky * 0.75, 0, yG]), HH, 7, '#C7D6E4', 0.9);     // 먼 산줄기
+      ridge(S0, -10, W + 10, yG - sky * 0.36, 44, 21, grad(defs, 'fgU2', [[0, '#92ADBE'], [1, '#C4D7DF']], [0, yG - sky * 0.5, 0, yG]), HH, 9, '#B3C8D4', 0.9);
+      haze('fgUh', '#FFFFFF', 0.5, 80);
+      const leeY = lerp(peak[1], yG, 0.75), rr = 9;                                      // 꼭대기는 둥글게
+      const ux = (geo.x1 - geo.x0) / Math.hypot(geo.x1 - geo.x0, yG - peak[1]), uy = (yG - peak[1]) / Math.hypot(geo.x1 - geo.x0, yG - peak[1]);
+      const lx = (W - geo.x1) / Math.hypot(W - geo.x1, leeY - peak[1]), ly = (leeY - peak[1]) / Math.hypot(W - geo.x1, leeY - peak[1]);
+      const pA = [peak[0] - ux * rr, peak[1] + uy * rr], pB = [peak[0] + lx * rr, peak[1] + ly * rr];
+      const body = `M0 ${HH} L0 ${yG} L${N1(geo.x0)} ${yG} L${N1(pA[0])} ${N1(pA[1])} Q${N1(peak[0])} ${N1(peak[1])} ${N1(pB[0])} ${N1(pB[1])} L${W} ${N1(leeY)} L${W} ${HH} Z`;
+      s('path', { d: body, fill: grad(defs, 'fgUm', [[0, '#86A873'], [0.6, '#74975F'], [1, '#668A55']], [0, peak[1], 0, yG]) }, S0);
+      s('path', { d: `M${N1(pA[0])} ${N1(pA[1])} Q${N1(peak[0])} ${N1(peak[1])} ${N1(pB[0])} ${N1(pB[1])} L${W} ${N1(leeY)} L${W} ${HH} L${N1(peak[0] + 26)} ${HH} L${N1(peak[0] - 6)} ${N1(peak[1] + 40)} Z`, fill: '#4F7350', opacity: 0.6 }, S0);   // 그늘진 뒤쪽 사면
+      const cid = uid('fum'); s('path', { d: body }, s('clipPath', { id: cid }, defs));
+      const tex = s('g', { 'clip-path': `url(#${cid})` }, S0);
+      s('path', { d: `M${N1(geo.x0)} ${yG} L${N1(pA[0])} ${N1(pA[1])} Q${N1(peak[0])} ${N1(peak[1])} ${N1(pB[0])} ${N1(pB[1])}`, fill: 'none', stroke: '#B5D09E', 'stroke-width': 2, 'stroke-linecap': 'round', opacity: 0.75 }, S0);   // 빛 받는 능선
+      s('rect', { x: 0, y: yG, width: W, height: HH - yG, fill: grad(defs, 'fgUg', [[0, '#7FA468'], [1, '#5F8650']]) }, tex);
+      s('path', { d: `M0 ${yG} L${N1(geo.x0 + 6)} ${yG}`, stroke: '#B5D09E', 'stroke-width': 1.6, opacity: 0.7 }, S0);
+      // 사면의 나무: 아래 줄(작고 어둡게) → 사면 위 줄
+      for (let i = 0; i < 8; i++) { const tt = (i + 0.9) / 9.4, x = lerp(geo.x0, geo.x1, tt) + 14, y = lerp(yG, peak[1], tt) + 26 + 5 * (i % 2); pine(tex, x, y, (17 + 6 * (1 - tt)) * k, '#3B6340', '#4F7B50'); }
+      for (let i = 1; i <= 9; i++) { const tt = i / 10, x = lerp(geo.x0, geo.x1, tt), y = lerp(yG, peak[1], tt); pine(S0, x - 6, y + 4, (22 + 9 * (1 - tt) + (i % 2) * 3) * k, '#2B5534', '#44794A'); }
+      // 산기슭 마을
+      [[0.03, 27], [0.085, 31]].forEach(([tx, hh]) => roundTree(S0, W * tx, yG + 3, hh * k, '#4A7741', '#6C9A58'));
+      house(S0, W * 0.15, yG + 2, 24 * k, 16 * k, { wall: '#F1E6D3', roof: '#B5573F', shade: '#8C3F2D', chimney: true });
+      tufts(S0, 0, geo.x0, yG + 22, 5, '#53784A', 5); tufts(S0, 0, W, HH - 2, Math.round(W / 40), '#4D7446', 8);
       const H = A(1).H;
       if (H <= geo.zTop) {
         s('line', { x1: 0, x2: W, y1: geo.yZ(H), y2: geo.yZ(H), stroke: 'var(--lcl)', 'stroke-width': 2, 'stroke-dasharray': '12 5 3 5' }, S0);
-        lbl(S0, 8, geo.yZ(H) - 7, '상승 응결 고도', '#7A4E10', { class: 'lb-sm halo-sky' });
+        const yl = geo.yZ(H) - 7, clash = yl > yG - 96 && yl < yG - 30;                 // 왼쪽 글자(단열 팽창 · 바람)와 겹치면 오른쪽 끝에
+        lbl(S0, clash ? W - 8 : 8, yl, '상승 응결 고도', '#7A4E10', { class: 'lb-sm halo-sky', 'text-anchor': clash ? 'end' : 'start' });
       }
     } else if (st.kind === 'steam') {
-      const xw = X('steam', 0.3);
-      ridge(S0, -10, W + 10, yG - 52, 22, 8, '#7D8E86', g.H, 12);                   // 건너편 숲
-      for (let i = 0; i < 14; i++) pine(S0, xw + 10 + (W - xw) * i / 14, yG - 30 + (i % 3) * 3, 18 + (i % 4) * 3, '#5F7268');
-      s('path', { d: P2([[0, g.H], [0, yG - 8], [xw * 0.6, yG - 4], [xw + 6, yG], [xw + 6, g.H]]) + ' Z', fill: '#E4EAEE' }, S0);   // 서리 내린 땅
-      const lake = s('linearGradient', { id: 'foglake', x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
-      [['0%', '#4B93B4'], ['100%', '#2E6F92']].forEach(([o, c]) => s('stop', { offset: o, 'stop-color': c }, lake));
-      s('rect', { x: xw, y: yG, width: W - xw, height: g.H - yG, fill: 'url(#foglake)' }, S0);
-      for (let i = 0; i < 5; i++) s('line', { x1: xw + 30 + i * (W - xw) / 5, x2: xw + 70 + i * (W - xw) / 5, y1: yG + 14 + (i % 2) * 14, y2: yG + 14 + (i % 2) * 14, stroke: '#9CCBE0', 'stroke-width': 2, opacity: 0.6 }, S0);
-      [[0.06, 40], [0.15, 32], [0.24, 36]].forEach(([t, hh]) => bareTree(S0, W * t, yG - 6, hh, '#6B6258'));
-      s('path', { d: `M${xw + 4} ${yG - 3} L${xw + 70} ${yG - 3}`, stroke: '#8A6B4A', 'stroke-width': 5 }, S0);      // 선착장
-      [xw + 14, xw + 40, xw + 64].forEach(x => s('line', { x1: x, x2: x, y1: yG - 3, y2: yG + 14, stroke: '#6E5338', 'stroke-width': 3 }, S0));
+      /* 늦가을 이른 아침의 호수: 서리 내린 땅 · 건너편 숲 · 따뜻한 수면 */
+      const xw = X('steam', 0.3), sx = W * 0.84, sy = yG - 118;
+      s('circle', { cx: sx, cy: sy, r: 52, fill: 'url(#fogSun)', opacity: 0.85 }, S0);
+      s('circle', { cx: sx, cy: sy, r: 13, fill: '#FFF4D6' }, S0);
+      [[0.3, 172, 70, 0.5], [0.62, 150, 52, 0.42], [0.16, 132, 40, 0.34]].forEach(([tx, dy, w, op]) => { s('ellipse', { cx: W * tx, cy: yG - dy, rx: w * k, ry: 4.5, fill: '#FFFFFF', opacity: op }, S0); s('ellipse', { cx: W * tx + 22 * k, cy: yG - dy + 6, rx: w * k * 0.7, ry: 3.5, fill: '#FFFFFF', opacity: op * 0.8 }, S0); });   // 옅은 구름 띠
+      ridge(S0, -10, W + 10, yG - 70, 28, 14, grad(defs, 'fgS1', [[0, '#A9B8C2'], [1, '#D2DBDF']], [0, yG - 104, 0, yG - 20]), HH, 7, '#C4D0D7', 0.8);                // 먼 산
+      ridge(S0, -10, W + 10, yG - 46, 16, 8, grad(defs, 'fgS2', [[0, '#72877F'], [1, '#93A49B']], [0, yG - 66, 0, yG]), HH, 12);                                     // 건너편 숲 언덕
+      for (let i = 0; i < 20; i++) { const R = rng(i * 7 + 2), x = lerp(xw - 20, W + 6, (i + R() * 0.7) / 20); pine(S0, x, yG - 26 + R() * 14, (17 + R() * 11) * k, '#53685F', '#687D72', '#4C5A52'); }
+      for (let i = 0; i < 12; i++) { const R = rng(i * 13 + 5), x = lerp(xw + 6, W + 6, (i + R() * 0.8) / 12); pine(S0, x, yG - 6 + R() * 5, (20 + R() * 10) * k, '#43584F', '#5A7065', '#3F4C45'); }
+      haze('fgSh', '#F6F1EA', 0.6, 46);                                                                                                                              // 수면 위 옅은 빛
+      // 호수
+      s('rect', { x: xw, y: yG, width: W - xw, height: HH - yG, fill: grad(defs, 'foglake', [[0, '#5AA2C2'], [0.5, '#3C83A8'], [1, '#2A688C']]) }, S0);
+      s('path', { d: `M${N1(xw)} ${yG + 0.8} L${W} ${yG + 0.8}`, stroke: '#DDF0F7', 'stroke-width': 1.8, opacity: 0.8 }, S0);
+      for (let i = 0; i < 5; i++) { const y = yG + 7 + i * 8, hw = 16 - i * 2.2; s('line', { x1: N1(sx - hw), x2: N1(sx + hw), y1: y, y2: y, stroke: '#FFE9B8', 'stroke-width': 2.2, 'stroke-linecap': 'round', opacity: 0.75 - i * 0.12 }, S0); }   // 물에 비친 햇빛
+      for (let i = 0; i < 6; i++) { const R = rng(i + 40), x = lerp(xw + 20, W - 50, R()), y = yG + 12 + R() * (HH - yG - 22); s('line', { x1: N1(x), x2: N1(x + 20 + R() * 22), y1: N1(y), y2: N1(y), stroke: '#A9D6E8', 'stroke-width': 1.6, 'stroke-linecap': 'round', opacity: 0.5 }, S0); }
+      // 서리 내린 땅
+      s('path', { d: `M0 ${HH} L0 ${yG - 12} C${N1(xw * 0.35)} ${yG - 16} ${N1(xw * 0.7)} ${yG - 7} ${N1(xw - 4)} ${yG - 3} Q${N1(xw + 8)} ${yG - 1} ${N1(xw + 9)} ${yG + 8} L${N1(xw + 4)} ${HH} Z`, fill: grad(defs, 'fgSnow', [[0, '#F7FAFC'], [1, '#CBD8E2']]) }, S0);
+      s('path', { d: `M0 ${yG + 14} C${N1(xw * 0.4)} ${yG + 6} ${N1(xw * 0.7)} ${yG + 22} ${N1(xw + 5)} ${yG + 16}`, fill: 'none', stroke: '#B9C9D6', 'stroke-width': 2, opacity: 0.6 }, S0);
+      [[0.105, 46, 3], [0.175, 34, 7], [0.24, 42, 11]].forEach(([tx, hh, sd]) => bareTree(S0, W * tx, yG - 9, hh * k, '#6B5F55', sd));
+      tufts(S0, 4, xw - 14, yG - 5, 5, '#A9977D', 9);
+      // 선착장과 나룻배
+      s('rect', { x: N1(xw + 2), y: yG - 6, width: N1(64 * k), height: 4, rx: 1, fill: '#9A7850' }, S0);
+      s('rect', { x: N1(xw + 2), y: yG - 2.5, width: N1(64 * k), height: 1.5, fill: '#6E5338' }, S0);
+      [0.2, 0.58, 0.94].forEach(tt => s('rect', { x: N1(xw + 2 + 64 * k * tt - 1.5), y: yG - 7, width: 3, height: 22, fill: '#6E5338' }, S0));
+      const bx = xw + 64 * k + 22 * k;
+      s('path', { d: `M${N1(bx - 17 * k)} ${yG - 5} Q${N1(bx)} ${yG + 9} ${N1(bx + 19 * k)} ${yG - 6} Z`, fill: '#8A5A3C' }, S0);
+      s('path', { d: `M${N1(bx - 17 * k)} ${yG - 5} L${N1(bx + 19 * k)} ${yG - 6}`, stroke: '#C99A6A', 'stroke-width': 1.8, 'stroke-linecap': 'round' }, S0);
       lbl(S0, (xw + W) / 2, yG + 30, '따뜻한 수면', '#FFFFFF', { 'text-anchor': 'middle', class: 'lb-sm tnum', stroke: 'none' });
     } else {   // frontal
+      /* 전선면: 위쪽 따뜻한 공기 · 아래쪽 찬 공기, 비구름과 비 내리는 마을 */
       const fr = frontGeo(g);
-      s('path', { d: P2([[0, g.top - 20], [W, g.top - 20], [W, fr.yR], [fr.x0, yG], [0, yG]]) + ' Z', fill: '#F4DCC8', opacity: 0.55 }, S0);   // 따뜻한 공기
-      s('path', { d: P2([[fr.x0, yG], [W, fr.yR], [W, yG]]) + ' Z', fill: '#C6DAEC', opacity: 0.85 }, S0);                                       // 찬 공기
+      s('path', { d: P2([[0, 0], [W, 0], [W, fr.yR], [fr.x0, yG], [0, yG]]) + ' Z', fill: grad(defs, 'fgFw', [[0, '#F6D2B4', 0.75], [1, '#F3DCC9', 0.35]], [0, 0, W, 0]) }, S0);   // 따뜻한 공기
+      s('path', { d: P2([[fr.x0, yG], [W, fr.yR], [W, yG]]) + ' Z', fill: grad(defs, 'fgFc', [[0, '#D3E3F1', 0.85], [1, '#AFCBE6', 0.95]], [0, fr.yR, 0, yG]) }, S0);              // 찬 공기
       const cx0 = W * 0.34;
-      cloudShape(S0, { x0: cx0 - 20, y0: g.top - 10, x1: W + 10, y1: fr.yR + 20 }, c => {
-        c.rect(cx0, g.top + 30, W - cx0 + 10, Math.max(10, fr.yR - g.top - 46), 16);
-        for (let i = 0; i < 8; i++) c.circle(cx0 + 10 + (W - cx0) * i / 7, g.top + 30, 20 + (i % 3) * 6);
-      }, 0.95);
+      rainCloud(S0, defs, cx0 - 22, W + 14, g.top + 6, fr.yR - 4);
       lbl(S0, cx0 + 20, g.top + 64, '비구름', '#55606A', { class: 'lb-sm' });
-      s('line', { x1: fr.x0, y1: yG, x2: W, y2: fr.yR, stroke: '#B0513A', 'stroke-width': 3.5 }, S0);
-      for (let i = 1; i <= 5; i++) { const t = i / 6, x = lerp(fr.x0, W, t), y = lerp(yG, fr.yR, t); s('circle', { cx: x, cy: y, r: 6.5, fill: '#B0513A' }, S0); }
+      s('line', { x1: fr.x0, y1: yG, x2: W, y2: fr.yR, stroke: '#B8523B', 'stroke-width': 3.2, 'stroke-linecap': 'round' }, S0);
+      for (let i = 1; i <= 5; i++) { const tt = i / 6, x = lerp(fr.x0, W, tt), y = lerp(yG, fr.yR, tt); s('path', { d: 'M-7.5 0 A7.5 7.5 0 0 0 7.5 0 Z', fill: '#B8523B', transform: `translate(${N1(x)} ${N1(y)}) rotate(${N1(fr.ang)})` }, S0); }   // 온난 전선 기호(반원)
       const lx = lerp(fr.x0, W, 0.3), ly = fr.yAt(lx) - 12;
       lbl(S0, lx, ly, '전선면', '#8A3A28', { transform: `rotate(${fr.ang} ${lx} ${ly})` });
-      s('rect', { x: 0, y: yG, width: W, height: g.H - yG, fill: '#8FA582' }, S0);
-      [[0.5, 22, 16, '#E9E1D2', '#9C5A44'], [0.58, 26, 18, '#DDD3C1', '#7F4B3B'], [0.86, 24, 17, '#E6DCCB', '#9C5A44']].forEach(([t, w, hh, c1, c2]) => house(S0, W * t, yG + 1, w, hh, c1, c2, false));
-      [0.66, 0.74, 0.95].forEach(t => roundTree(S0, W * t, yG + 2, 30, '#56794A'));
+      // 비에 젖은 들판과 마을
+      s('rect', { x: 0, y: yG, width: W, height: HH - yG, fill: grad(defs, 'fgFg', [[0, '#93AA86'], [1, '#748E6C']]) }, S0);
+      s('path', { d: `M0 ${yG} L${W} ${yG}`, stroke: '#B4C7A6', 'stroke-width': 1.5, opacity: 0.7 }, S0);
+      [[0.3, 0.6, 26], [0.52, 0.8, 30], [0.12, 0.34, 22]].forEach(([a0, a1, w], i) => s('path', { d: `M${N1(W * a0)} ${yG + 16 + i * 12} q${N1(W * (a1 - a0) / 2)} ${-5 + i * 3} ${N1(W * (a1 - a0))} 0`, fill: 'none', stroke: '#829B78', 'stroke-width': 1.3, opacity: 0.8 }, S0));   // 밭두렁
+      [[0.44, 26, '#52754B', '#6B9160'], [0.725, 32, '#52754B', '#6B9160'], [0.785, 25, '#4A6D45', '#63895A'], [0.955, 30, '#52754B', '#6B9160']].forEach(([tx, hh, c1, c2]) => roundTree(S0, W * tx, yG + 3, hh * k, c1, c2));
+      [[0.5, 23, 16, 0, '#EDE4D5', '#A45C45', '#7C4334'], [0.575, 28, 19, 1, '#E0D6C4', '#6E7F8E', '#4E5D6A'], [0.86, 25, 17, 2, '#EAE0CF', '#A45C45', '#7C4334']].forEach(([tx, w, hh, kind, wall, roof, sh2]) => house(S0, W * tx, yG + 2, w * k, hh * k, { wall, roof, shade: sh2, hip: kind === 1, chimney: kind === 2 }));
+      tufts(S0, 0, W, HH - 2, Math.round(W / 40), '#617C5A', 4);
       lbl(S0, W - 8, fr.yR + (yG - fr.yR) * 0.42, '찬 공기', '#1F5A88', { 'text-anchor': 'end' });
     }
   }
@@ -500,15 +639,16 @@ const FogLab = (function () {
       const W = g.W, yG = g.yG, vl = valley(g);
       const dawn = clamp((st.s - 0.8) / 0.2, 0, 1), cloudy = st.sky !== 'clear';
       sa(E.sky0, { 'stop-color': mixColor(cloudy ? '#232C3C' : '#111B33', '#56688F', dawn) }); sa(E.sky1, { 'stop-color': mixColor(cloudy ? '#3A4556' : '#2C3F66', '#F0C79E', dawn) });
-      if (dawn > 0) s('circle', { cx: W * 0.82, cy: yG - 150, r: 70, fill: 'url(#fogSun)', opacity: dawn * 0.9 }, E.back);
+      if (dawn > 0) s('circle', { cx: W * 0.82, cy: yG - clamp((yG - g.top) * 0.46, 150, 250), r: 70, fill: 'url(#fogSun)', opacity: dawn * 0.9 }, E.back);   // 먼 산 뒤로 밝아 오는 하늘
       if (!cloudy) {
         const R = rng(5);
         for (let i = 0; i < 40; i++) { const tw = 0.6 + 0.4 * Math.sin(tm * 1.6 + i * 1.7); s('circle', { cx: R() * W, cy: g.top + R() * (yG - g.top) * 0.5, r: 0.7 + R() * 1.2, fill: '#fff', opacity: ((0.45 + R() * 0.55) * tw * (1 - dawn)).toFixed(2) }, E.back); }
-        s('circle', { cx: W * 0.16, cy: g.top + 40, r: 16, fill: '#F2EFD8', opacity: 0.95 - 0.7 * dawn }, E.back);
-        s('circle', { cx: W * 0.16 + 6, cy: g.top + 36, r: 14, fill: mixColor('#111B33', '#56688F', dawn), opacity: 0.95 - 0.7 * dawn }, E.back);   // 초승달
+        const mx = W * 0.16, my = g.top + 42, mr = 15;
+        s('circle', { cx: mx, cy: my, r: mr * 4.2, fill: 'url(#fogMoon)', opacity: (1 - 0.8 * dawn).toFixed(2) }, E.back);
+        s('path', { d: `M${N1(mx + mr * 0.2)} ${N1(my - mr)} A${mr} ${mr} 0 1 0 ${N1(mx + mr * 0.95)} ${N1(my + mr * 0.45)} A${N1(mr * 0.82)} ${N1(mr * 0.82)} 0 1 1 ${N1(mx + mr * 0.2)} ${N1(my - mr)} Z`, fill: '#F6F1D6', opacity: (0.96 - 0.7 * dawn).toFixed(2) }, E.back);   // 초승달
       } else {
         const dx = Math.sin(tm * 0.12) * 8;
-        cloudShape(E.back, { x0: -30, y0: g.top - 20, x1: W + 30, y1: g.top + 74 }, c => { c.rect(-30, g.top + 24, W + 60, 40, 16); for (let i = -1; i <= 10; i++) c.circle(W * i / 9 + dx, g.top + 26, 24 + ((i + 3) % 3) * 7); }, 0.9);
+        cloudShape(E.back, { x0: -30, y0: g.top - 20, x1: W + 30, y1: g.top + 76 }, c => { c.rect(-30, g.top + 24, W + 60, 34, 14); for (let i = -1; i <= 10; i++) { c.circle(W * i / 9 + dx, g.top + 26, 24 + ((i + 3) % 3) * 7); c.circle(W * (i + 0.5) / 9 + dx, g.top + 56, 13 + ((i + 4) % 3) * 4); } }, 0.82);
       }
       // 지표 복사: 맑으면 우주로 빠져나가고, 흐리면 구름이 다시 지표로 돌려보냄
       const xs = [0.12, 0.27, 0.42, 0.58, 0.73, 0.88];
@@ -521,7 +661,7 @@ const FogLab = (function () {
       lbl(E.dyn, W * 0.5, g.top + (cloudy ? 92 : 70), cloudy ? '구름이 열을 되돌려 보내요' : '지표면 복사 냉각', cloudy ? '#FFD9C2' : '#FFC9A8', { 'text-anchor': 'middle', class: 'lb-sm', stroke: 'rgba(17,27,51,.85)', 'stroke-width': 4, 'paint-order': 'stroke' });
       if (st.wind === 'windy') {
         for (let i = 0; i < 3; i++) { const cx = ((tm * 46 + i * 160) % (W + 160)) - 80, cy = yG - 50 - i * 24; curveArrow(E.dyn, [[cx - 40, cy + 8], [cx - 10, cy - 10], [cx + 20, cy + 6], [cx + 46, cy - 6]], '#E3ECF6', 2.6, 0.85); }
-        lbl(E.dyn, W * 0.5, yG - 126, '바람이 공기를 섞어요', '#E3ECF6', { 'text-anchor': 'middle', stroke: 'rgba(17,27,51,.85)', 'stroke-width': 4, 'paint-order': 'stroke' });
+        lbl(E.dyn, W * 0.5, yG - 126, '바람이 공기를 섞어요', '#E3ECF6', { 'text-anchor': 'middle', class: 'lb-sm', stroke: 'rgba(17,27,51,.85)', 'stroke-width': 4, 'paint-order': 'stroke' });
       }
       // 골짜기 바닥에서 얇게 깔리기 시작해 옆으로, 위로 번지는 안개 (밤에는 푸르스름하고 동틀 무렵 희어짐)
       fogTint(mixColor('#CDD8EA', '#FFFFFF', dawn));
@@ -531,10 +671,11 @@ const FogLab = (function () {
     advection(g, a, on, dens, v) {
       const W = g.W, yG = g.yG, xc = W * 0.8;
       sa(E.sky0, { 'stop-color': '#9DCBEA' }); sa(E.sky1, { 'stop-color': '#E8F3FA' });
-      s('circle', { cx: W * 0.1, cy: g.top + 40, r: 42, fill: 'url(#fogSun)', opacity: 0.9 }, E.back);
+      s('circle', { cx: W * 0.1, cy: g.top + 40, r: 46, fill: 'url(#fogSun)', opacity: 0.9 }, E.back);
       s('circle', { cx: W * 0.1, cy: g.top + 40, r: 15, fill: '#FFF3C4' }, E.back);
-      [[0.42, 46, 30], [0.7, 30, 22]].forEach(([t, y, r], i) => { const cx = W * t + Math.sin(tm * 0.1 + i * 2) * 10; cloudShape(E.back, { x0: cx - r * 2.2, y0: g.top + y - r, x1: cx + r * 2.2, y1: g.top + y + r * 0.6 }, c => { c.rect(cx - r * 1.8, g.top + y - r * 0.2, r * 3.6, r * 0.8, r * 0.4); c.circle(cx - r * 0.8, g.top + y, r * 0.7); c.circle(cx + r * 0.3, g.top + y - r * 0.3, r); c.circle(cx + r * 1.2, g.top + y + 2, r * 0.6); }, 0.95); });
-      waves(E.dyn, 6, xc - 6, yG + 10, '#E8F6F5', tm * 0.9, 40); waves(E.dyn, 26, xc - 6, yG + 40, '#DDEFF5', tm * 0.6, 46);
+      [[0.44, 66, 21], [0.72, 44, 15], [0.93, 84, 11]].forEach(([t, y, r], i) => cumulus(E.back, W * t + Math.sin(tm * 0.1 + i * 2) * 10, g.top + y, r * g.k, 0.96));
+      [[0.3, 96], [0.34, 106], [0.6, 88]].forEach(([t, y], i) => { const x = W * t + Math.sin(tm * 0.25 + i) * 8, yy = g.top + y + Math.sin(tm * 0.6 + i * 2) * 2, fl = 2 + Math.sin(tm * 5 + i * 1.3) * 1.6; s('path', { d: `M${N1(x - 6)} ${N1(yy - fl)} Q${N1(x - 3)} ${N1(yy - fl - 2)} ${N1(x)} ${N1(yy)} Q${N1(x + 3)} ${N1(yy - fl - 2)} ${N1(x + 6)} ${N1(yy - fl)}`, fill: 'none', stroke: '#6E7F8E', 'stroke-width': 1.4, 'stroke-linecap': 'round' }, E.back); });   // 갈매기
+      waves(E.dyn, 6, xc - 6, yG + 10, '#E8F6F5', tm * 0.9, 40); waves(E.dyn, 26, xc - 64, yG + 40, '#DDEFF5', tm * 0.6, 46);
       const px = X('advection', a.x), py = yG - 30;
       // 남쪽 따뜻한 바다에서 불어오는 온난 습윤한 공기
       const wy = yG - 120;
@@ -579,8 +720,6 @@ const FogLab = (function () {
     steam(g, a, on, dens, v) {
       const W = g.W, yG = g.yG, xw = X('steam', 0.3);
       sa(E.sky0, { 'stop-color': '#C9D7E2' }); sa(E.sky1, { 'stop-color': '#F4EEE6' });
-      s('circle', { cx: W * 0.86, cy: yG - 70, r: 46, fill: 'url(#fogSun)', opacity: 0.8 }, E.back);
-      s('circle', { cx: W * 0.86, cy: yG - 70, r: 13, fill: '#FFF1D0', opacity: 0.95 }, E.back);
       const px = X('steam', a.x), py = yG - 30;
       for (let i = 0; i < 3; i++) { const u = frac(tm * 0.2 + i / 3), x0 = lerp(-50, xw + 30, u), y = yG - 18 - i * 16; arrowLine(s('g', { opacity: Math.sin(Math.PI * u).toFixed(2) }, E.dyn), x0, y, x0 + 54, y, '#3A78AA', 2.6); }
       lbl(E.dyn, 10, yG - 82, '찬 공기 →', '#1F5A88');
