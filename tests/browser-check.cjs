@@ -158,6 +158,16 @@ const ok = (c, label, detail) => { if (c) { pass++; console.log('  ✓ ' + label
     ok(z === 0, 'γ 12 아래로 내렸다 놓으면 지표까지 내려감', z);
     const frames = await ev(`(${S}.setCond({ gamma: 4 }), ${S}.st.run.frames.length)`);
     ok(frames === 1, '조건 변경 시 이전 운동 기록 없음', frames);
+    // 강제 상승 → 놓기 동안 안내 칸 · 현재 수치 높이가 흔들리지 않음 (문장이 한 줄 ↔ 두 줄로 바뀌어도)
+    await ev(`${S}.setCond({ gamma: 8, sat: true })`);
+    const hs = await page.evaluate(async () => {
+      const api = App.TABS.stab.api, g = document.querySelector('#lab-stab .ro-guide'), ro = document.querySelector('#lab-stab .readouts');
+      const seen = new Set(); const t0 = performance.now();
+      api.force(1); setTimeout(() => api.release(), 2000);
+      while (performance.now() - t0 < 5000) { seen.add(Math.round(g.getBoundingClientRect().height) + '/' + Math.round(ro.getBoundingClientRect().height)); await new Promise(r => setTimeout(r, 40)); }
+      return [...seen];
+    });
+    ok(hs.length === 1, '강제 상승 · 놓기 동안 안내 칸과 현재 수치의 높이가 그대로', hs);
   }
 
   console.log('[구름의 종류 (공기 올리기 · 역전층)]');

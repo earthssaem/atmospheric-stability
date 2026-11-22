@@ -588,8 +588,8 @@ const FogLab = (function () {
     }
     if (st.s >= 1 - 1e-9 && on == null) { ui.ro.guide('안개 없음', 'neutral', noFogText()); return; }
     ui.ro.guide('불포화', 'unsat', cool
-      ? `${{ radiation: '맑은 밤, 지표면이 복사 냉각으로 식으며 지표 부근 공기도 식어요.', advection: a.overCold ? '차가운 해수면 위를 지나며 공기가 아래에서 식어요.' : '따뜻한 바다 위에서는 기온이 거의 그대로예요.', upslope: '산 사면을 따라 올라가며 단열 팽창으로 식어요(1 km에 10 ℃).' }[st.kind]} 이슬점까지 <b>${fT(a.T - a.Td)} ℃</b> 남았어요.`
-      : `${{ steam: a.overWater ? '따뜻한 수면에서 증발한 수증기가 찬 공기 속으로 들어와요.' : '차가운 육지 위에서는 수증기량이 그대로예요.', frontal: '빗방울이 찬 공기층을 지나며 증발해 수증기가 늘어요.' }[st.kind]} 포화까지 <b>${fmt(a.E - a.e, 1)} hPa</b> 남았어요.`);
+      ? `${{ radiation: '맑은 밤, 지표면이 복사 냉각으로 식으며 지표 부근 공기도 식어요.', advection: a.overCold ? '차가운 해수면 위를 지나며 공기가 아래에서 식어요.' : '따뜻한 바다 위에서는 기온이 거의 그대로예요.', upslope: '산 사면을 따라 올라가며 단열 팽창으로 식어요(1 km에 10 ℃).' }[st.kind]} 기온이 이슬점까지 내려가면 포화돼요.`
+      : `${{ steam: a.overWater ? '따뜻한 수면에서 증발한 수증기가 찬 공기 속으로 들어와요.' : '차가운 육지 위에서는 수증기량이 그대로예요.', frontal: '빗방울이 찬 공기층을 지나며 증발해 수증기가 늘어요.' }[st.kind]} 수증기압이 포화 수증기압에 이르면 포화돼요.`);
   }
   function renderControls() {
     if (!ui.ctrl) return;

@@ -140,7 +140,8 @@ function Readouts(container, defs) {
       if (c.sub.innerHTML !== sb) { c.sub.innerHTML = sb; c.sub.title = stripTags(sb); }
     },
     guide(stateLabel, stateCls, html) {
-      const g = (stateLabel ? `<span class="state ${stateCls || ''}">${stateLabel}</span>` : '') + `<span>${html}</span>`;
+      // 상태 이름이 없을 때도 자리를 남겨 칸 높이가 바뀌지 않게 함
+      const g = (stateLabel ? `<span class="state ${stateCls || ''}">${stateLabel}</span>` : '<span class="state" style="visibility:hidden" aria-hidden="true">·</span>') + `<span class="msg">${html}</span>`;
       if (g !== lastGuide) { guide.innerHTML = g; lastGuide = g; }
     }
   };

@@ -558,7 +558,7 @@ const StabLab = (function () {
     const atOrigin = Math.abs(fr.z - Z0) < 0.005;
     if ((fr.phase === 'lift' || fr.phase === 'drag') && fr.dir !== 0) {
       ui.ro.guide(fr.dir > 0 ? '올리는 중' : '내리는 중', 'neutral',
-        `${st.sat ? '포화된 공기는 1 km에 5 ℃씩' : '불포화 공기는 1 km에 10 ℃씩'} ${fr.dir > 0 ? '낮아지고' : '높아지고'}, 주위 기온은 1 km에 ${g} ℃씩 ${fr.dir > 0 ? '낮아져요' : '높아져요'}. ${vs}`);
+        `${st.sat ? '포화된 공기는 1 km에 5 ℃씩' : '불포화 공기는 1 km에 10 ℃씩'} ${fr.dir > 0 ? '낮아지고' : '높아지고'}, 주위 기온은 1 km에 ${g} ℃씩 ${fr.dir > 0 ? '낮아져요' : '높아져요'}.`);
       return;
     }
     if (fr.phase === 'hold' || fr.phase === 'drag') {
@@ -573,22 +573,20 @@ const StabLab = (function () {
     const hd = heading(fr);
     if (hd !== 0) {
       ui.ro.guide(hd > 0 ? '되돌아가는 중' : '멀어지는 중', hd > 0 ? 'down' : 'up',
-        `주위보다 ${b < 0 ? '차가워 아래로' : '따뜻해 위로'} 힘을 받아 원래 위치${hd > 0 ? ' 쪽으로 <b>되돌아가요</b>' : '에서 <b>멀어져요</b>'}. ${vs}`);
+        `주위보다 ${b < 0 ? '차가워 아래로' : '따뜻해 위로'} 힘을 받아 원래 위치${hd > 0 ? ' 쪽으로 <b>되돌아가요</b>' : '에서 <b>멀어져요</b>'}.`);
       return;
     }
     const out = outcomeAt(), rel = st.run.rel, up = rel && rel.z > Z0;
-    const ref = `${satName(st.sat)} 단열 감률 ${L0}`;
     if (out === 'back') {
-      ui.ro.guide('안정', 'down', `원래 위치로 되돌아왔어요 → <b>안정</b>. ${up ? '위로 올린 공기 덩어리가 주위보다 차가웠기' : '아래로 내린 공기 덩어리가 주위보다 따뜻했기'} 때문이에요. (기온 감률 ${g} &lt; ${ref})`);
+      ui.ro.guide('안정', 'down', `원래 위치로 되돌아왔어요 → <b>안정</b>. ${up ? '올린 공기가 주위보다 차가웠기' : '내린 공기가 주위보다 따뜻했기'} 때문이에요. (기온 감률 ${g} &lt; ${L0})`);
     } else if (out === 'away') {
-      const edge = st.run.frames[st.idx].note === 'top' ? ' 표시 범위 위쪽 끝(4 km)에서 멈췄지만 실제로는 더 올라가요.' : '';
-      ui.ro.guide('불안정', 'up', `원래 위치에서 멀어졌어요 → <b>불안정</b>. ${up ? '위로 올린 공기 덩어리가 주위보다 따뜻해 계속 올라갔어요' : '아래로 내린 공기 덩어리가 주위보다 차가워 계속 내려갔어요'}. (기온 감률 ${g} &gt; ${ref})${edge}`);
+      ui.ro.guide('불안정', 'up', `원래 위치에서 멀어졌어요 → <b>불안정</b>. ${up ? '올린 공기가 주위보다 따뜻해 계속 올라갔어요' : '내린 공기가 주위보다 차가워 계속 내려갔어요'}. (기온 감률 ${g} &gt; ${L0})`);
     } else if (out === 'stay') {
-      ui.ro.guide('중립', 'neutral', `놓은 자리에 그대로 머물러요 → <b>중립</b>. 어느 높이에서나 공기 덩어리와 주위 기온이 같아요. (기온 감률 ${g} = ${ref})`);
+      ui.ro.guide('중립', 'neutral', `놓은 자리에 그대로 머물러요 → <b>중립</b>. 어느 높이에서나 공기와 주위 기온이 같아요. (기온 감률 ${g} = ${L0})`);
     } else if (out === 'origin') {
       ui.ro.guide('정지', 'neutral', '원래 위치에서는 주위와 기온이 같아 움직이지 않아요. 먼저 <b>강제 상승</b>이나 <b>강제 하강</b>을 눌러 보세요.');
     } else if (atOrigin && !rel) {
-      ui.ro.guide('준비', 'neutral', `원래 위치(${fZ(Z0)} km)에서는 공기 덩어리와 주위 기온이 ${fT(TZ0)} ℃로 같아요. <b>강제 상승</b>이나 <b>강제 하강</b>으로 움직인 뒤 놓아 보세요.`);
+      ui.ro.guide('준비', 'neutral', `원래 위치(${fmt(Z0, 0)} km)에서는 공기와 주위 기온이 ${fT(TZ0)} ℃로 같아요. <b>강제 상승</b> · <b>강제 하강</b>으로 움직여 보세요.`);
     } else {
       ui.ro.guide('정지', 'neutral', vs);
     }

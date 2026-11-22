@@ -187,7 +187,7 @@ svg text { font-family: var(--font); }
 /* 3·4탭: 간단한 조작 줄 (한 줄에 꼭 필요한 버튼만) */
 .ctrl-bar.act-bar { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 7px 10px; }
 .act-bar .btn { min-height: 48px; font-size: 17px; padding: 0 20px; }
-.act-bar .rel-hint { flex: 1 1 240px; max-width: none; font-size: 15px; }
+.act-bar .rel-hint { flex: 1 1 240px; max-width: none; font-size: 15px; min-height: 2.8em; display: flex; align-items: center; }   /* 안내가 생기고 사라져도 줄 높이 그대로 */
 
 /* 3. 대기 안정도: 지금 공기의 판정 배지 · 포화 여부 · 정리 표 · A·B·C 구간 */
 .stab-badge.st-stable { background: #E1ECF5; color: #1F5A88; }
@@ -269,6 +269,8 @@ table.fog-table { width: 100%; border-collapse: collapse; font-size: 15px; line-
 .ro-guide .state.up { background: #FBE8E4; color: #9C3B2E; }
 .ro-guide .state.down { background: #E4EEF6; color: #1F5A88; }
 .ro-guide .state.neutral { background: var(--soft); color: var(--ink-2); }
+/* 안내 문장은 늘 두 줄 자리를 차지: 문장이 바뀌어 한 줄 ↔ 두 줄이 되어도 칸 높이(와 화면 배치)가 흔들리지 않게 */
+.ro-guide .msg { min-height: 2.8em; }
 
 /* ───────── 조작부 ───────── */
 .ctrl-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
@@ -377,6 +379,7 @@ footer .hub:hover{color:var(--ink);text-decoration-color:currentColor}
   .ro { border-bottom: 1px solid #EFECE5; }
   .ctrl-bar .tail { margin-left: 0; }
   .ctrl-bar .btn { flex: 1 1 auto; }
+  .ctrl-bar .btn.play { flex-basis: 100%; }   /* 재생 버튼 글자(재생 · 일시정지 · 이어서 재생)가 바뀌어도 버튼 줄 배치 그대로 */
   .more { grid-template-columns: minmax(0, 1fr); }
   .pane-head { height: auto; min-height: 38px; flex-wrap: wrap; white-space: normal; padding: 6px 12px; }
   .legend { margin-left: 0; }
@@ -392,6 +395,7 @@ footer .hub:hover{color:var(--ink);text-decoration-color:currentColor}
   .readouts.sticky .ro .sub { display: none; }
   .readouts.sticky .ro-guide { font-size: 14.5px; padding: 5px 10px; }
   .readouts.sticky .ro-guide .state { display: none; }
+  .readouts.sticky .ro-guide .msg { min-height: 4.2em; }   /* 폰: 세 줄 자리를 늘 차지 (문장이 바뀌어도 위쪽 칸 높이 그대로) */
 }
 @media (max-width: 480px) {
   /* 좁은 폰: 탭 이름이 길면 두 줄로 */

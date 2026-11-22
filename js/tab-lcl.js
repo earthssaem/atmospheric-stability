@@ -455,7 +455,10 @@ const LclLab = (function () {
     const S = stages();
     ui.ctrl.setStep(S.some(v => v < st.z - 1e-9), S.some(v => v > st.z + 1e-9));
     ui.zf.set(st.z);
-    ui.goLCL.hidden = st.guided && !st.revealed;
+    // 응결 고도에 닿기 전에는 보이지 않게만 하고 자리는 남김 (나타날 때 버튼 줄이 흔들리지 않게)
+    const hideGo = st.guided && !st.revealed;
+    ui.goLCL.style.visibility = hideGo ? 'hidden' : '';
+    ui.goLCL.setAttribute('aria-hidden', hideGo ? 'true' : 'false');
     ui.goLCL.disabled = Math.abs(st.z - Hn) < 1e-9;
     ui.tLCL.el.hidden = st.guided;
     ui.tPath.el.querySelector('span').innerHTML = st.guided ? '전체 경로 보기' : '예상 경로';
