@@ -105,6 +105,37 @@ function drawAxes(g, f, xr, opt) {
   const over = s('g', null, g);
   return { gx, tOf, X0, X1, Y0, Y1, plot, over, bg, xr };
 }
+/**
+ * 글자 겹침 정리: labels(움직이는 글자)가 같은 SVG의 다른 글자와 겹치면 위·아래로 조금씩 옮겨 빈 자리를 찾는다.
+ * box(그래프 축 안쪽)를 주면 그 밖으로 나가지 않게 가로로도 밀어 넣는다. 빈 자리가 없으면 원래 자리에 둔다.
+ * (SVG 좌표 1 = 화면 1 px: layoutShell이 viewBox를 실제 크기로 맞춤)
+ */
+function untangle(svg, labels, box) {
+  const vis = el => { for (let e = el; e && e !== svg; e = e.parentNode) { if (e.getAttribute && (e.getAttribute('opacity') === '0' || e.getAttribute('visibility') === 'hidden')) return false; } return true; };
+  const sr = svg.getBoundingClientRect();
+  const rect = el => { const r = el.getBoundingClientRect(); return { l: r.left - sr.left, r: r.right - sr.left, t: r.top - sr.top, b: r.bottom - sr.top }; };
+  const hit = (a, c) => Math.min(a.r, c.r) - Math.max(a.l, c.l) > 1 && Math.min(a.b, c.b) - Math.max(a.t, c.t) > 2;
+  const mine = labels.filter(el => el && el.textContent.trim() && vis(el));
+  const others = [...svg.querySelectorAll('text')].filter(t => !labels.includes(t) && t.textContent.trim() && vis(t)).map(rect);
+  mine.forEach(el => {
+    const x0 = +el.getAttribute('x'), y0 = +el.getAttribute('y');
+    const at = dy => {
+      const y = box ? clamp(y0 + dy, box.Y1 + 12, box.Y0 - 4) : y0 + dy;
+      sa(el, { x: x0, y });
+      let r = rect(el);
+      if (box) {
+        const sx = r.l < box.X0 + 2 ? box.X0 + 2 - r.l : (r.r > box.X1 - 2 ? box.X1 - 2 - r.r : 0);
+        if (sx) { sa(el, { x: x0 + sx }); r = rect(el); }
+      }
+      return r;
+    };
+    for (const dy of [0, -16, 16, -30, 30, -44, 44, -60, 60, -76, 76]) {
+      const r = at(dy);
+      if (!others.some(o => hit(r, o))) { others.push(r); return; }
+    }
+    others.push(at(0));
+  });
+}
 function pathD(points, ax, f) {
   return points.map((p, i) => `${i ? 'L' : 'M'}${ax.gx(p[0]).toFixed(1)} ${f.yOf(p[1]).toFixed(1)}`).join(' ');
 }

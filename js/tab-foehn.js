@@ -483,6 +483,7 @@ const FoehnLab = (function () {
     sa(E.parcel.g, { 'aria-valuenow': Math.round(st.s * 100), 'aria-valuetext': `${atStage(fo) ? stageTxt(atStage(fo)) : ''} 높이 ${fZ(cur.z)} km, 기온 ${fT(cur.T)} ℃, 이슬점 ${fT(cur.Td)} ℃` });
     sa(E.sNow, { y1: yz, y2: yz });
     sa(E.sNowBg, { x: G.W - 68, y: yz - 12 }); sa(E.sNowT, { x: G.W - 10, y: yz + 5 }); E.sNowT.textContent = `${fZ(cur.z)} km`;
+    { const tb = E.sNowTag.getBoundingClientRect(); E.ticks.forEach(t => { const r = t.getBoundingClientRect(); sa(t, { opacity: r.bottom > tb.top - 2 && r.top < tb.bottom + 2 ? 0 : 1 }); }); }   // 좁은 화면: 지금 높이 표와 겹치는 눈금 글자는 잠시 숨김
 
     /* 그래프 */
     sa(E.gM, { y1: f.yOf(st.M), y2: f.yOf(st.M) });
@@ -509,6 +510,7 @@ const FoehnLab = (function () {
     const narrow = ax.X1 - ax.X0 < 360;
     const flip = xT + 14 + 150 > ax.X1;
     sa(E.lblSame, { x: narrow ? clamp(xT, ax.X0 + 75, ax.X1 - 75) : (flip ? xT - 14 : xT + 14), 'text-anchor': narrow ? 'middle' : (flip ? 'end' : 'start'), y: narrow ? clamp(yz + 26, ax.Y1 + 14, ax.Y0 - 8) : ly, opacity: cur.saturated ? 1 : 0 });
+    untangle(sh.graphSvg, [E.lblT, E.lblD, E.lblSame], ax);   // 값 글자가 다른 글자와 겹치지 않게
     // 단계 표시 + 상승/하강 이름
     clear(E.marks);
     const all = pathVisible();

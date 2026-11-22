@@ -440,8 +440,10 @@ const CloudLab = (function () {
     s('path', { d: pathD([[st.T0, 0], [st.T0 - 10 * ZMAX, ZMAX]], ax, f), stroke: '#C9C3B6', 'stroke-width': 1.5, 'stroke-dasharray': '4 5', fill: 'none' }, E.ref);
     if (Hn < ZMAX) s('path', { d: pathD([[tH, Hn], [tH - 5 * (ZMAX - Hn), ZMAX]], ax, f), stroke: '#B8C6D3', 'stroke-width': 1.5, 'stroke-dasharray': '4 5', fill: 'none' }, E.ref);
     const lz = Math.min(ZMAX - 0.4, Hn + 1.8);
-    if (Hn < ZMAX - 1) txt({ x: ax.gx(st.T0 - 10 * lz) - 8, y: f.yOf(lz), 'text-anchor': 'end', class: 'lb-sm halo', fill: '#9C968A' }, '건조 단열선(참고)', o);
-    if (Hn < ZMAX - 0.8) { const mz = Math.min(ZMAX - 0.2, Hn + 2.6); txt({ x: ax.gx(tH - 5 * (mz - Hn)) + 8, y: f.yOf(mz), class: 'lb-sm', fill: '#8EA0B0' }, '습윤 단열선(참고)', o); }
+    const refL = [];
+    if (Hn < ZMAX - 1) refL.push(txt({ x: ax.gx(st.T0 - 10 * lz) - 8, y: f.yOf(lz), 'text-anchor': 'end', class: 'lb-sm halo', fill: '#9C968A' }, '건조 단열선', o));
+    if (Hn < ZMAX - 0.8) { const mz = Math.min(ZMAX - 0.2, Hn + 2.6); refL.push(txt({ x: ax.gx(tH - 5 * (mz - Hn)) + 8, y: f.yOf(mz), class: 'lb-sm halo', fill: '#8EA0B0' }, '습윤 단열선', o)); }
+    untangle(svg, refL, ax);   // 좁은 화면: 축 밖으로 나가거나 눈금 글자와 겹치지 않게
     // 고정 그림(주위 기온선)
     const P = prof();
     const ep = [];
@@ -562,7 +564,7 @@ const CloudLab = (function () {
     // 공기 덩어리 기온 글자와 이어 읽히지 않게 좌우로 여유를 두고 피함
     const markBoxes = E.markEls.filter(m => shown(m.g)).map(m => bbox(m.t)).filter(Boolean).map(bb => ({ x: bb.x - 14, y: bb.y + 3, width: bb.width + 28, height: bb.height - 6 }));
     if (typ) { const ty = +E.typT.getAttribute('y'); dodge(E.typT, typ === 'cumulus' ? [ty, ty - 18, ty + 18] : [ty, ty - 18, yH + 44, yH + 62], near.concat(markBoxes)); }
-    if (Hn <= ZMAX) dodge(E.sLCLt, [yH - 7, yH + 18, yH + 32], (shown(E.typT) ? near.concat([bbox(E.typT)]) : near).concat(markBoxes));
+    if (Hn <= ZMAX) dodge(E.sLCLt, [yH - 7, yH + 18, yH + 32], (shown(E.typT) ? near.concat([bbox(E.typT)]) : near).concat(markBoxes, E.envLbls.filter(shown).map(bbox)));
     else sa(E.sLCLt, { opacity: 0 });
 
     /* 그래프 */
@@ -608,6 +610,7 @@ const CloudLab = (function () {
     clear(E.edge);
     edgeMarker(E.edge, ax, f, par.T, z, 'var(--temp)');
     edgeMarker(E.edge, ax, f, env, z, 'var(--env)');
+    untangle(sh.graphSvg, [E.lblP, E.lblE], ax);   // 값 글자가 다른 글자와 겹치지 않게
 
     /* 수치 */
     ui.ro.set('z', `${fZ(z)}<small>km</small>`, `응결 고도 ${fZ(Hn)} km`);

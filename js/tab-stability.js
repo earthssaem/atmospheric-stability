@@ -511,6 +511,7 @@ const StabLab = (function () {
     clear(E.edge);
     edgeMarker(E.edge, ax, f, d.T, z, 'var(--temp)');
     edgeMarker(E.edge, ax, f, d.Te, z, 'var(--env)');
+    untangle(sh.graphSvg, [E.lblP, E.lblE], ax);   // 값 글자가 다른 글자와 겹치지 않게
 
     /* 수치 */
     ui.ro.set('Tp', `${sP}<small>℃</small>`, `높이 ${fZ(z)} km`);

@@ -259,6 +259,34 @@ const ok = (c, label, detail) => { if (c) { pass++; console.log('  ✓ ' + label
     ok(/증발 안개/.test(cur), '정리 표에서 지금 안개(증발 안개) 줄 강조', cur);
   }
 
+  console.log('[글자 겹침]');
+  {
+    const overlaps = t => page.evaluate(t => {
+      const out = [];
+      for (const pane of ['.scene-pane svg', '.graph-pane svg']) {
+        const svg = document.querySelector('#lab-' + t + ' ' + pane);
+        const vis = el => { for (let e = el; e && e !== svg; e = e.parentNode) if (e.getAttribute && (e.getAttribute('opacity') === '0' || e.getAttribute('visibility') === 'hidden')) return false; return true; };
+        const ts = [...svg.querySelectorAll('text')].filter(x => x.textContent.trim() && vis(x)).map(x => ({ t: x.textContent.trim(), r: x.getBoundingClientRect() }));
+        for (let i = 0; i < ts.length; i++) for (let j = i + 1; j < ts.length; j++) {
+          const a = ts[i].r, c = ts[j].r;
+          if (Math.min(a.right, c.right) - Math.max(a.left, c.left) > 2 && Math.min(a.bottom, c.bottom) - Math.max(a.top, c.top) > 3) out.push(ts[i].t + ' × ' + ts[j].t);
+        }
+      }
+      return out;
+    }, t);
+    await page.click('#tab-btn-fog'); await page.waitForTimeout(150);
+    const fogHits = [];
+    for (const k of ['radiation', 'advection', 'upslope', 'steam', 'frontal']) for (const sv of [0, 1]) {
+      await ev(`App.TABS.fog.api.setKind('${k}'); App.TABS.fog.api.setS(${sv})`); await page.waitForTimeout(40);
+      (await overlaps('fog')).forEach(x => fogHits.push(`${k}@${sv}: ${x}`));
+    }
+    ok(fogHits.length === 0, '안개 장면 · 그래프: 글자끼리 겹치지 않음 (다섯 안개의 처음 · 끝)', fogHits);
+    await page.click('#tab-btn-lcl'); await page.waitForTimeout(150);
+    const lclHits = [];
+    for (const z of [0.6, 1, 2.4]) { await ev(`App.TABS.lcl.api.setZ(${z})`); await page.waitForTimeout(40); lclHits.push(...await overlaps('lcl')); }
+    ok(lclHits.length === 0, '응결 고도 그래프: 값 글자가 선 이름 · 눈금과 겹치지 않음', lclHits);
+  }
+
   console.log('[장면 · 그래프 같은 높이 정렬]');
   for (const [t, act] of [['lcl', 'App.TABS.lcl.api.setZ(2.37)'], ['foehn', 'App.TABS.foehn.api.setS(0.33)'], ['stab', 'App.TABS.stab.api.liftTo(3.3)'], ['cloud', 'App.TABS.cloud.api.seek(Math.floor(App.TABS.cloud.api.st.run.frames.length / 2))']]) {
     await page.click('#tab-btn-' + t); await page.waitForTimeout(200);

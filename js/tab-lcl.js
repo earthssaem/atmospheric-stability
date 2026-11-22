@@ -228,7 +228,8 @@ const LclLab = (function () {
     s('path', { d: `M0 ${y0} L0 ${y0 - 10} Q${f.sceneW * 0.25} ${y0 - 22} ${f.sceneW * 0.5} ${y0 - 10} T${f.sceneW} ${y0 - 14} L${f.sceneW} ${y0} Z`, fill: '#C9D8C3' }, svg);
     s('rect', { x: 0, y: y0, width: f.sceneW, height: f.H - y0, fill: '#B9C9AE' }, svg);
     txt({ x: 12, y: y0 + 24, class: 'lb-sm', fill: '#3D4A3A' }, '지표 (0 km)', svg);
-    if (f.stacked) for (let z = 0; z <= ZMAX; z++) txt({ x: f.sceneW - 8, y: f.yOf(z) - 5, 'text-anchor': 'end', class: 'tk' }, z + ' km', svg);
+    E.ticks = [];
+    if (f.stacked) for (let z = 0; z <= ZMAX; z++) E.ticks.push(txt({ x: f.sceneW - 8, y: f.yOf(z) - 5, 'text-anchor': 'end', class: 'tk' }, z + ' km', svg));
     E.cloud = s('g', null, svg); E.cloudKey = null;
     E.sLCL = s('g', null, svg);
     E.sLCLline = s('line', { 'data-role': 'lcl', x1: 0, x2: f.sceneW, stroke: 'var(--lcl)', 'stroke-width': 2.5, 'stroke-dasharray': '12 5 3 5' }, E.sLCL);
@@ -273,7 +274,7 @@ const LclLab = (function () {
     // 참고용 건조 단열선 (옅게)
     for (let t0 = xr.min; t0 <= xr.max + 50; t0 += 10) s('line', { x1: ax.gx(t0), y1: f.yOf(0), x2: ax.gx(t0 - 10 * ZMAX), y2: f.yOf(ZMAX), stroke: '#C9C3B6', 'stroke-width': 1, 'stroke-dasharray': '3 5' }, ax.bg);
     const t0r = Math.ceil((xr.min + 48) / 10) * 10;
-    if (ax.gx(t0r - 46) < ax.X1 - 130) txt({ x: ax.gx(t0r - 46) + 6, y: f.yOf(4.6) + 4, class: 'lb-sm halo', fill: '#9C968A' }, '건조 단열선(참고)', ax.over);
+    if (ax.gx(t0r - 46) < ax.X1 - 130) txt({ x: ax.gx(t0r - 46) + 6, y: f.yOf(4.6) + 4, class: 'lb-sm halo', fill: '#9C968A' }, '건조 단열선', ax.over);
     const p = ax.plot;
     E.cmpT = s('path', { fill: 'none', stroke: 'var(--temp)', 'stroke-width': 2.5, opacity: 0.32 }, p);
     E.cmpTf = s('path', { fill: 'none', stroke: 'var(--temp)', 'stroke-width': 2, opacity: 0.25, 'stroke-dasharray': '2 5' }, p);
@@ -331,6 +332,7 @@ const LclLab = (function () {
     const tw = 70;
     sa(E.sNowTagBg, { x: f.sceneW - tw - 6, y: yz - 12, width: tw });
     sa(E.sNowTagT, { x: f.sceneW - 12, y: yz + 5 });
+    { const tb = E.sNowTag.getBoundingClientRect(); E.ticks.forEach(t => { const r = t.getBoundingClientRect(); sa(t, { opacity: r.bottom > tb.top - 2 && r.top < tb.bottom + 2 ? 0 : 1 }); }); }   // 좁은 화면: 지금 높이 표와 겹치는 눈금 글자는 잠시 숨김
     // 공기 덩어리 속 응결: 구름 바닥 = 응결 고도 (덩어리가 응결 고도 위에 있을 때만)
     const ck = sat && st.z > 1e-9 ? `${Math.round(yz)}|${Math.round(yH)}|${Math.round(r)}` : '';
     if (ck !== E.cloudKey) {
@@ -384,6 +386,7 @@ const LclLab = (function () {
     const showNames = st.z > zl + 0.05;
     sa(E.lineT, { x: ax.gx(st.T0 - 10 * Math.min(zl, Hn)) + 8, y: f.yOf(zl) + 4, opacity: showNames && Hn > 0.2 ? 1 : 0 });
     sa(E.lineD, { x: ax.gx(st.Td0 - 2 * Math.min(zl, Hn)) - 8, y: f.yOf(zl) + 4, opacity: showNames && Hn > 0.2 ? 1 : 0 });
+    untangle(sh.graphSvg, [E.lblT, E.lblD, E.lblSame, E.lblOverlap, E.gLCLt], ax);   // 값 글자 · 응결 고도 글자가 선 이름 · 눈금 · 「지표」 등 다른 글자와 겹치지 않게
     // 비교
     let cmpSubT = '', cmpSubD = '', cmpSubGap = '';
     if (st.cmp) {
