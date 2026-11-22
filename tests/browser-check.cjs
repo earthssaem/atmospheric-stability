@@ -257,6 +257,22 @@ const ok = (c, label, detail) => { if (c) { pass++; console.log('  ✓ ' + label
     ok(a[0] === '2.0℃' && b[0] === '2.0℃' && parseFloat(b[2]) > parseFloat(a[2]) && b[3] === '100%', '증발 안개: 기온 2 ℃ 그대로, 수증기압이 늘어 포화', { a, b });
     const cur = await ev(() => document.querySelector('#lab-fog .fog-table tr.cur .fog-n').textContent);
     ok(/증발 안개/.test(cur), '정리 표에서 지금 안개(증발 안개) 줄 강조', cur);
+    // 안개는 갑자기 나타나지 않고 서서히 피어오르며, 멈춰 있어도 장면은 천천히 흐른다
+    await ev(`${F}.setKind('radiation')`); await ev(`${F}.resetDefaults()`); await ev(`${F}.step(1)`);   // 앞에서 바꾼 「흐림」을 기본값(맑음 · 바람 약함)으로
+    const v0 = await ev(`${F}.view().vis`); await page.waitForTimeout(1800);
+    const v1 = await ev(`${F}.view().vis`);
+    const puffs = await ev(() => document.querySelectorAll('#lab-fog .scene-pane svg ellipse[fill="url(#fogPuff)"]').length);
+    ok(v0 < 0.1 && v1 > 0.3 && puffs > 5, '안개가 생기는 순간: 바로 나타나지 않고 서서히 피어오름', { v0, v1, puffs });
+    const fogDom = () => ev(() => [...document.querySelectorAll('#lab-fog .scene-pane svg ellipse[fill="url(#fogPuff)"]')].map(e => e.getAttribute('cx')).join(','));
+    const d0 = await fogDom(); await page.waitForTimeout(400); const d1 = await fogDom();
+    ok(d0 !== d1 && !(await ev(`${F}.st.playing`)), '멈춰 있어도 안개가 천천히 흐름', d0.slice(0, 40));
+    const on = await ev(`${F}.onset()`);
+    await ev(`${F}.setS(${on} - 0.03)`); await ev(`${F}.play()`); await page.waitForTimeout(1100);
+    const mid = await ev(`[${F}.st.s, ${F}.st.playing]`);
+    ok(Math.abs(mid[0] - on) < 1e-9 && mid[1] === true, '재생: 안개가 생기기 시작한 순간에 잠깐 머묾 (재생 상태 그대로)', mid);
+    await page.waitForTimeout(4200);
+    const fin = await ev(`[${F}.st.s, ${F}.st.playing]`);
+    ok(fin[0] === 1 && fin[1] === false, '재생: 머문 뒤 스스로 이어져 끝(새벽 5시)에서 멈춤', fin);
   }
 
   console.log('[글자 겹침]');
