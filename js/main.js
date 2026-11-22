@@ -4,8 +4,13 @@
 'use strict';
 
 const App = (function () {
-  const TABS = { lcl: typeof LclLab !== 'undefined' ? LclLab : null, foehn: typeof FoehnLab !== 'undefined' ? FoehnLab : null, stab: typeof StabLab !== 'undefined' ? StabLab : null };
-  const ORDER = ['lcl', 'foehn', 'stab'];
+  const TABS = {
+    lcl: typeof LclLab !== 'undefined' ? LclLab : null,
+    foehn: typeof FoehnLab !== 'undefined' ? FoehnLab : null,
+    stab: typeof StabLab !== 'undefined' ? StabLab : null,
+    cloud: typeof CloudLab !== 'undefined' ? CloudLab : null
+  };
+  const ORDER = ['lcl', 'foehn', 'stab', 'cloud'];
   let active = 'lcl';
 
   function show(id, focus) {

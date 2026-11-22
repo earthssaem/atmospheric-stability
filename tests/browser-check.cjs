@@ -1,7 +1,7 @@
 /**
  * tests/browser-check.cjs — 실제 브라우저(Chromium)에서 화면 상태를 확인하는 회귀 검사
  * 실행: node tests/browser-check.cjs   (Playwright가 설치된 환경에서)
- * 수치 칸·그래프·장면이 계산과 맞는지, 되감기·조건 변경·비교 기록·역전층 전환이 일관적인지 본다.
+ * 수치 칸·그래프·장면이 계산과 맞는지, 되감기·조건 변경·비교 기록·역전층 전환·빈칸 채우기가 일관적인지 본다.
  */
 'use strict';
 const path = require('path');
@@ -113,58 +113,105 @@ const ok = (c, label, detail) => { if (c) { pass++; console.log('  ✓ ' + label
     ok(/"M":2/.test(cmp) && /"T0":20/.test(cmp), '비교 저장 후 조건을 바꿔도 비교 조건 유지', cmp);
   }
 
-  console.log('[대기 안정도]');
+  console.log('[대기 안정도 (원래 위치에서 강제로 움직이기)]');
   {
     await page.click('#tab-btn-stab'); await page.waitForTimeout(200);
-    await ev('App.TABS.stab.api.liftTo(2)');
-    await page.waitForTimeout(3900);
+    const S = 'App.TABS.stab.api';
     let r = await ro('stab');
-    ok(r[0] === '2.00km' && r[1] === '10.0℃' && r[2] === '14.0℃', '2 km: 공기 10 ℃ · 주위 14 ℃', r);
-    await ev('App.TABS.stab.api.release()'); await page.waitForTimeout(900);
-    let z = await ev('App.TABS.stab.api.cur().z');
-    ok(z < 2, '2 km에서 놓으면 하강', z);
-    await ev('App.TABS.stab.api.resetMotion()'); await ev('App.TABS.stab.api.liftTo(3.5)'); await page.waitForTimeout(6300);
+    ok(r[0] === '2.00km' && r[1] === '10.0℃' && r[2] === '10.0℃', '처음: 원래 위치 2 km에서 공기 = 주위 10 ℃', r);
+    // γ 8 · 불포화: 1 km 올리면 공기 0 ℃ · 주위 2 ℃ → 놓으면 되돌아옴(안정)
+    await ev(`${S}.force(1)`); await page.waitForTimeout(2200);
     r = await ro('stab');
+    ok(r[0] === '3.00km' && r[1] === '0.0℃' && r[2] === '2.0℃' && r[3] === '−2.0℃', 'γ 8 불포화 +1 km: 공기 0 ℃ · 주위 2 ℃ (낮다)', r);
+    const blankBefore = await ev(() => document.querySelectorAll('#lab-stab .stab-table .blank.filled').length);
+    await ev(`${S}.release()`); await page.waitForTimeout(9000);
+    let z = await ev(`${S}.cur().z`);
+    r = await ro('stab');
+    ok(Math.abs(z - 2) < 0.03 && /되돌아왔어요/.test(r.guide) && /안정/.test(r.guide), '놓으면 원래 위치로 되돌아옴 → 안정', { z, g: r.guide });
+    const filled = await ev(() => [...document.querySelectorAll('#lab-stab .stab-table .blank.filled')].map(b => b.textContent).join(','));
+    ok(blankBefore === 0 && /낮다/.test(filled) && /</.test(filled), '관찰한 칸(안정)의 빈칸이 채워짐: 낮다 · <', filled);
+    // 되감기: 같은 순간은 같은 수치
+    const mid = await ev(`Math.floor(${S}.st.run.frames.length * 0.5)`);
+    await ev(`${S}.seek(${mid})`); const a = await ro('stab');
+    await ev(`${S}.seek(0)`); await ev(`${S}.seek(${mid})`); const b = await ro('stab');
+    ok(JSON.stringify(a) === JSON.stringify(b), '기록 되감기: 같은 순간은 같은 수치', { a: a[0], b: b[0] });
+    // 같은 γ 8에서 포화 공기: 공기 5 ℃ · 주위 2 ℃ → 멀어짐(불안정)
+    await ev(`${S}.setCond({ sat: true })`); await ev(`${S}.force(1)`); await page.waitForTimeout(2200);
+    r = await ro('stab');
+    ok(r[1] === '5.0℃' && r[2] === '2.0℃' && r[3] === '+3.0℃', 'γ 8 포화 +1 km: 공기 5 ℃ · 주위 2 ℃ (높다)', r);
+    await ev(`${S}.release()`); await page.waitForTimeout(3500);
+    z = await ev(`${S}.cur().z`);
+    r = await ro('stab');
+    ok(z > 3.9 && /멀어졌어요/.test(r.guide), '포화 공기는 멀어짐 → 불안정 (조건부 불안정)', { z, g: r.guide });
+    const badge = await ev(() => [...document.querySelectorAll('#lab-stab .stab-badge')].map(x => x.textContent).join(' | '));
+    ok(/포화 공기: 불안정/.test(badge) && /C 조건부 불안정/.test(badge), '배지: 포화 공기 불안정 · C 조건부 불안정', badge);
+    // 중립: γ 10 · 불포화 → 놓은 자리에 머묾
+    await ev(`${S}.setCond({ gamma: 10, sat: false })`); await ev(`${S}.force(-1)`); await page.waitForTimeout(2200);
+    await ev(`${S}.release()`); await page.waitForTimeout(1500);
+    z = await ev(`${S}.cur().z`);
+    r = await ro('stab');
+    ok(Math.abs(z - 1) < 1e-6 && /그대로 머물러요/.test(r.guide), 'γ 10 불포화: 놓은 자리(1 km)에 그대로 → 중립', { z, g: r.guide });
+    // 절대 불안정 γ 12 · 불포화를 아래로: 지표까지 내려감
+    await ev(`${S}.setCond({ gamma: 12 })`); await ev(`${S}.force(-1)`); await page.waitForTimeout(2200);
+    await ev(`${S}.release()`); await page.waitForTimeout(4000);
+    z = await ev(`${S}.cur().z`);
+    ok(z === 0, 'γ 12 아래로 내렸다 놓으면 지표까지 내려감', z);
+    const frames = await ev(`(${S}.setCond({ gamma: 4 }), ${S}.st.run.frames.length)`);
+    ok(frames === 1, '조건 변경 시 이전 운동 기록 없음', frames);
+  }
+
+  console.log('[구름의 종류 (공기 올리기 · 역전층)]');
+  {
+    await page.click('#tab-btn-cloud'); await page.waitForTimeout(200);
+    await ev('App.TABS.cloud.api.liftTo(2)');
+    await page.waitForTimeout(3900);
+    let r = await ro('cloud');
+    ok(r[0] === '2.00km' && r[1] === '10.0℃' && r[2] === '14.0℃', '2 km: 공기 10 ℃ · 주위 14 ℃', r);
+    await ev('App.TABS.cloud.api.release()'); await page.waitForTimeout(900);
+    let z = await ev('App.TABS.cloud.api.cur().z');
+    ok(z < 2, '2 km에서 놓으면 하강', z);
+    await ev('App.TABS.cloud.api.resetMotion()'); await ev('App.TABS.cloud.api.liftTo(3.5)'); await page.waitForTimeout(6300);
+    r = await ro('cloud');
     ok(r[0] === '3.50km' && r[1] === '2.5℃' && r[2] === '2.0℃', '3.5 km: 공기 2.5 ℃ · 주위 2.0 ℃', r);
-    await ev('App.TABS.stab.api.release()'); await page.waitForTimeout(900);
-    z = await ev('App.TABS.stab.api.cur().z');
+    await ev('App.TABS.cloud.api.release()'); await page.waitForTimeout(900);
+    z = await ev('App.TABS.cloud.api.cur().z');
     ok(z > 3.5, '3.5 km에서 놓으면 상승', z);
     await page.waitForTimeout(9000);
-    r = await ro('stab');
+    r = await ro('cloud');
     ok(/표시 범위/.test(r.guide) && r[0] === '6.00km', '상한 도달: "표시 범위에 도달했어요"', r);
     // 되감기
-    const idxMid = await ev('Math.floor(App.TABS.stab.api.st.run.frames.length * 0.6)');
-    await ev(`App.TABS.stab.api.seek(${idxMid})`); const a = await ro('stab');
-    await ev(`App.TABS.stab.api.seek(0)`); await ev(`App.TABS.stab.api.seek(${idxMid})`); const b = await ro('stab');
+    const idxMid = await ev('Math.floor(App.TABS.cloud.api.st.run.frames.length * 0.6)');
+    await ev(`App.TABS.cloud.api.seek(${idxMid})`); const a = await ro('cloud');
+    await ev(`App.TABS.cloud.api.seek(0)`); await ev(`App.TABS.cloud.api.seek(${idxMid})`); const b = await ro('cloud');
     ok(JSON.stringify(a) === JSON.stringify(b), '기록 되감기: 같은 순간은 같은 수치', { a: a[0], b: b[0] });
-    await page.click('#lab-stab .graph-pane input[type=checkbox]');
-    const lbl = await ev(() => [...document.querySelectorAll('#lab-stab .graph-pane svg text')].map(t => t.textContent).join('|'));
+    await page.click('#lab-cloud .graph-pane input[type=checkbox]');
+    const lbl = await ev(() => [...document.querySelectorAll('#lab-cloud .graph-pane svg text')].map(t => t.textContent).join('|'));
     ok(/자유 대류 고도 약 3\.33 km/.test(lbl), '자유 대류 고도 약 3.33 km 표시', lbl.slice(0, 200));
-    const badge = async g => { await ev(`App.TABS.stab.api.setCond({gamma: ${g}})`); return ev(() => document.querySelector('#lab-stab .stab-badge').textContent); };
+    const badge = async g => { await ev(`App.TABS.cloud.api.setCond({gamma: ${g}})`); return ev(() => document.querySelector('#lab-cloud .stab-badge').textContent); };
     ok(/불포화 안정 · 포화 중립/.test(await badge(5)), 'γ = 5: 불포화 안정 · 포화 중립');
     ok(/불포화 중립 · 포화 불안정/.test(await badge(10)), 'γ = 10: 불포화 중립 · 포화 불안정');
     ok(/조건부 불안정/.test(await badge(8)), 'γ = 8: 조건부 불안정');
-    const frames = await ev('App.TABS.stab.api.st.run.frames.length');
+    const frames = await ev('App.TABS.cloud.api.st.run.frames.length');
     ok(frames === 1, '조건 변경 시 이전 운동 기록 없음', frames);
     // 비교 저장 후 조건 변경
-    await ev('App.TABS.stab.api.setCond({gamma: 4})'); await ev('App.TABS.stab.api.saveCompare()'); await ev('App.TABS.stab.api.setCond({gamma: 12})');
-    const cmp = await ev('App.TABS.stab.api.st.cmp.gamma');
+    await ev('App.TABS.cloud.api.setCond({gamma: 4})'); await ev('App.TABS.cloud.api.saveCompare()'); await ev('App.TABS.cloud.api.setCond({gamma: 12})');
+    const cmp = await ev('App.TABS.cloud.api.st.cmp.gamma');
     ok(cmp === 4, '비교 기록(γ 4) 유지', cmp);
     // 역전층
-    await page.evaluate(() => { const b = [...document.querySelectorAll('#lab-stab .fold .btn')].find(x => x.textContent.includes('예시 조건')); b.click(); });
-    await ev('App.TABS.stab.api.liftTo(0.5)'); await page.waitForTimeout(1000); await ev('App.TABS.stab.api.release()');
+    await page.evaluate(() => { const b = [...document.querySelectorAll('#lab-cloud .fold .btn')].find(x => x.textContent.includes('예시 조건')); b.click(); });
+    await ev('App.TABS.cloud.api.liftTo(0.5)'); await page.waitForTimeout(1000); await ev('App.TABS.cloud.api.release()');
     await page.waitForTimeout(16000);
-    const zi = await ev('App.TABS.stab.api.cur().z');
-    const maxZ = await ev('Math.max(...App.TABS.stab.api.st.run.frames.map(f => f.z))');
+    const zi = await ev('App.TABS.cloud.api.cur().z');
+    const maxZ = await ev('Math.max(...App.TABS.cloud.api.st.run.frames.map(f => f.z))');
     ok(maxZ < 2 && Math.abs(zi - 30 / 18) < 0.12, '역전층에 막혀 응결 고도 아래 약 1.67 km 부근에 머묾', { zi, maxZ });
-    r = await ro('stab');
-    const info = await ev(() => document.querySelector('#lab-stab .fold .note').textContent);
-    ok(/역전층/.test(await ev(() => document.querySelector('#lab-stab .stab-badge').textContent)), '역전층 배지 표시');
+    r = await ro('cloud');
+    const info = await ev(() => document.querySelector('#lab-cloud .fold .note').textContent);
+    ok(/역전층/.test(await ev(() => document.querySelector('#lab-cloud .stab-badge').textContent)), '역전층 배지 표시');
     void info; void r;
   }
 
   console.log('[장면 · 그래프 같은 높이 정렬]');
-  for (const [t, act] of [['lcl', 'App.TABS.lcl.api.setZ(2.37)'], ['foehn', 'App.TABS.foehn.api.setS(0.33)'], ['stab', 'App.TABS.stab.api.seek(Math.floor(App.TABS.stab.api.st.run.frames.length / 2))']]) {
+  for (const [t, act] of [['lcl', 'App.TABS.lcl.api.setZ(2.37)'], ['foehn', 'App.TABS.foehn.api.setS(0.33)'], ['stab', 'App.TABS.stab.api.liftTo(3.3)'], ['cloud', 'App.TABS.cloud.api.seek(Math.floor(App.TABS.cloud.api.st.run.frames.length / 2))']]) {
     await page.click('#tab-btn-' + t); await page.waitForTimeout(200);
     await ev(act); await page.waitForTimeout(100);
     const y = await ev(`(() => { const s = document.querySelector('#lab-${t} .scene-pane svg line[data-role="now"]').getBoundingClientRect(); const g = document.querySelector('#lab-${t} .graph-pane svg line[data-role="now"]').getBoundingClientRect(); return [s.top + s.height / 2, g.top + g.height / 2]; })()`);

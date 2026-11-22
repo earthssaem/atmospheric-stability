@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════
  * 대기 안정도 탐구실 — 디자인
- * 같은 물리량은 세 탭 모두 같은 색: 기온(붉은 실선) · 이슬점(파란 점선) · 주위 기온(짙은 회색 실선)
+ * 같은 물리량은 모든 탭에서 같은 색: 기온(붉은 실선) · 이슬점(파란 점선) · 주위 기온(짙은 회색 실선)
  * ═══════════════════════════════════════════════════════════════ */
 :root {
   --bg: #F6F5F1;
@@ -132,7 +132,7 @@ input[type=range]:disabled { opacity: .45; }
 .lab-panel.stacked .scene-pane { flex: none; }
 .lab-panel.stacked .graph-pane { border-left: 0; border-top: 1px solid var(--line); }
 .legend { display: flex; align-items: center; gap: 4px 14px; margin-left: auto; font-weight: 600; }
-.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .legend i { width: 24px; height: 0; border-top: 3px solid; display: inline-block; }
 .legend i.dash { border-top-style: dashed; }
 .legend i.dot { border-top-style: dotted; }
@@ -177,6 +177,37 @@ svg text { font-family: var(--font); }
 .presets { display: inline-flex; gap: 4px; margin-left: 4px; }
 .presets .btn { min-width: 44px; min-height: 44px; padding: 0 8px; }
 .presets .btn.on { background: var(--tab-on); border-color: #9CCFC6; color: var(--tab-on-ink); }
+
+/* 3. 대기 안정도: 지금 공기의 판정 배지 · 포화 여부 · 정리 표 · A·B·C 구간 */
+.stab-badge.st-stable { background: #E1ECF5; color: #1F5A88; }
+.stab-badge.st-unstable { background: #F8E3DE; color: #9C3B2E; }
+.stab-badge.st-neutral { background: #EFEDE6; color: #4E5D6A; }
+.sat-seg button small { font-size: 12.5px; font-weight: 600; color: var(--muted); margin-left: 3px; }
+.sat-seg button.on small { color: var(--ink-2); }
+.fold.wide { grid-column: 1 / -1; }
+table.stab-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 15px; line-height: 1.45; margin-top: 6px; table-layout: fixed; min-width: 560px; }
+.stab-table th, .stab-table td { border-bottom: 1px solid #EFECE5; padding: 7px 10px; vertical-align: top; text-align: left; word-break: keep-all; }
+.stab-table thead th { text-align: center; font-size: 16px; font-weight: 800; }
+.stab-table thead th.c-stable { color: #1F5A88; }
+.stab-table thead th.c-unstable { color: #9C3B2E; }
+.stab-table thead th.c-neutral { color: var(--ink-2); }
+.stab-table tbody th { width: 150px; font-size: 14px; color: var(--ink-2); font-weight: 700; background: var(--soft); }
+.stab-table thead th:first-child { width: 150px; }
+.stab-table .cur { background: #F2F8F6; box-shadow: inset 2px 0 0 #9CCFC6, inset -2px 0 0 #9CCFC6; }
+.stab-table thead th.cur { box-shadow: inset 2px 0 0 #9CCFC6, inset -2px 0 0 #9CCFC6, inset 0 2px 0 #9CCFC6; border-radius: 8px 8px 0 0; }
+.stab-table tbody tr:last-child .cur { box-shadow: inset 2px 0 0 #9CCFC6, inset -2px 0 0 #9CCFC6, inset 0 -2px 0 #9CCFC6; }
+.blank { display: inline-block; min-width: 44px; padding: 0 6px; border-bottom: 2px solid #8D959C; text-align: center; font-weight: 800; line-height: 1.3; vertical-align: baseline; }
+.blank:empty::after { content: '?'; color: #B4B9BD; font-weight: 700; }
+.blank.filled { color: #C0392B; border-bottom-color: #C0392B; }
+.zone-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 10px; border: 1px solid #EFECE5; border-radius: 10px; padding: 8px 10px; margin-top: 8px; }
+.zone-row .btn { grid-column: 2; grid-row: 1 / span 2; }
+.zone-head { display: flex; align-items: center; gap: 8px; font-size: 15.5px; }
+.zone-k { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; font-weight: 800; font-size: 14px; color: #fff; }
+.z-A .zone-k { background: #3F7FB4; }
+.z-B .zone-k { background: #C7663A; }
+.z-C .zone-k { background: #6C8A3A; }
+.zone-body { font-size: 14.5px; color: var(--ink-2); grid-column: 1; }
+.zone-row.cur { border-color: #9CCFC6; background: #F7FBFA; }
 
 /* ───────── 현재 수치 ───────── */
 .readouts { display: grid; grid-template-columns: repeat(var(--cells, 5), 146px) minmax(240px, 1fr); gap: 0; margin-top: 10px; background: #fff; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
@@ -320,4 +351,8 @@ footer .hub:hover{color:var(--ink);text-decoration-color:currentColor}
   .readouts.sticky .ro .sub { display: none; }
   .readouts.sticky .ro-guide { font-size: 14.5px; padding: 5px 10px; }
   .readouts.sticky .ro-guide .state { display: none; }
+}
+@media (max-width: 480px) {
+  /* 좁은 폰: 탭 이름이 길면 두 줄로 */
+  .tabs button { font-size: 14.5px; padding: 0 4px; white-space: normal; line-height: 1.15; word-break: keep-all; }
 }

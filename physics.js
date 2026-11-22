@@ -189,8 +189,35 @@
     return { z: z, v: v, a: a, b: b, hit: hit };
   }
 
+  /* ───────────── 대기 안정도 개념 실험: 원래 위치에서 강제로 움직인 공기 덩어리 ─────────────
+   * 원래 위치 z0에서 주위와 기온(T)이 같던 공기 덩어리를 강제로 올리거나 내린다.
+   * 불포화 공기는 건조 단열 감률, 포화 공기는 습윤 단열 감률로 기온이 변한다(움직이는 동안 상태는 그대로라고 가정).
+   * 주위 기온은 z0를 지나는 일정 감률 γ의 직선이다. 공기 − 주위 = (γ − 단열 감률) × (z − z0). */
+  function adiabatLapse(saturated) { return saturated ? MOIST : DRY; }
+  function displaced(T, z0, gamma, saturated, z) {
+    var Tp = T - adiabatLapse(saturated) * (z - z0), Te = T - gamma * (z - z0);
+    return { T: Tp, Te: Te, b: Tp - Te };
+  }
+  /* 운동(교육용 정성 모형): 가속도 = k × (공기 − 주위) − c × 속도.
+   * 안정할 때는 되돌아오며 원래 위치를 지나치지 않도록 임계 감쇠 c = 2√(k·(단열 감률 − γ))를 쓰고,
+   * 불안정·중립일 때는 c를 그대로 쓴다. 계수는 보기 좋은 빠르기를 위한 값으로 실제 속도를 뜻하지 않는다. */
+  var MOTION_DISP = { k: 0.5, c: 2.4 };
+  function displacedStep(gamma, saturated, z0, s, dt, zmin, zmax) {
+    var d = gamma - adiabatLapse(saturated);
+    var b = d * (s.z - z0);
+    var c = d < -EPS ? 2 * Math.sqrt(MOTION_DISP.k * -d) : MOTION_DISP.c;
+    var a = MOTION_DISP.k * b - c * s.v;
+    var v = s.v + a * dt;
+    var z = s.z + v * dt;
+    var hit = null;
+    if (z <= zmin) { z = zmin; if (v < 0) v = 0; hit = 'ground'; }
+    if (z >= zmax) { z = zmax; if (v > 0) v = 0; hit = 'top'; }
+    return { z: z, v: v, a: a, b: d * (z - z0), hit: hit };
+  }
+
   return {
-    DRY: DRY, MOIST: MOIST, DEW: DEW, EPS: EPS, MOTION: MOTION,
+    DRY: DRY, MOIST: MOIST, DEW: DEW, EPS: EPS, MOTION: MOTION, MOTION_DISP: MOTION_DISP,
+    adiabatLapse: adiabatLapse, displaced: displaced, displacedStep: displacedStep,
     lcl: lcl, clampDew: clampDew, parcel: parcel,
     foehn: foehn, foehnAt: foehnAt,
     satVapor: satVapor, relHumidity: relHumidity,

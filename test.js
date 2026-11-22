@@ -153,6 +153,22 @@ console.log('[역전층] 주위 기온 분포의 연속성과 운동');
   ok(flat.inv === null && near(P.envTemp(flat, 3), -6), '두께 0이면 일정 감률과 같음');
 }
 
+console.log('[대기 안정도 개념] 원래 위치 2 km · 10 ℃에서 강제로 움직이기');
+{
+  const d = (g, sat, z) => P.displaced(10, 2, g, sat, z);
+  ok(near(d(8, false, 3).T, 0) && near(d(8, false, 3).Te, 2) && near(d(8, false, 3).b, -2), 'γ 8 불포화 +1 km: 공기 0 ℃ · 주위 2 ℃ (낮다)');
+  ok(near(d(8, true, 3).T, 5) && near(d(8, true, 3).b, 3), 'γ 8 포화 +1 km: 공기 5 ℃ (높다) → 조건부 불안정');
+  ok(near(d(8, false, 1).b, 2), 'γ 8 불포화 −1 km: 주위보다 높다 (되돌아오는 방향)');
+  ok(near(d(10, false, 3.7).b, 0) && near(d(5, true, 0.4).b, 0), 'γ = 단열 감률이면 어느 높이에서나 같다 (중립)');
+  ok(P.adiabatLapse(false) === 10 && P.adiabatLapse(true) === 5, '불포화 10 · 포화 5 ℃/km');
+  const run = (g, sat, z0, sec) => { let s = { z: z0, v: 0 }, maxDev = 0; for (let i = 0; i < sec * 120; i++) { s = P.displacedStep(g, sat, 2, s, 1 / 120, 0, 4); maxDev = Math.max(maxDev, (z0 > 2 ? 2 - s.z : s.z - 2)); } return Object.assign(s, { overshoot: maxDev }); };
+  const st = run(4, false, 3, 6);
+  ok(Math.abs(st.z - 2) < 0.01 && st.overshoot < 1e-3, '안정(γ 4): 원래 위치로 되돌아오고 지나치지 않음', st);
+  ok(Math.abs(run(8, false, 1, 12).z - 2) < 0.02, '안정(γ 8 불포화): 아래에서도 되돌아옴');
+  ok(run(8, true, 3, 4).z === 4 && run(12, false, 1, 4).z === 0, '불안정: 위로는 표시 상한(4 km), 아래로는 지표까지 멀어짐');
+  ok(run(10, false, 3, 5).z === 3 && run(5, true, 1.4, 5).z === 1.4, '중립: 놓은 자리에 그대로');
+}
+
 console.log('[상대 습도]');
 {
   ok(P.relHumidity(10, 10) === 100, '기온 = 이슬점 → 100 %');
