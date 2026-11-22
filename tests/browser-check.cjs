@@ -167,6 +167,10 @@ const ok = (c, label, detail) => { if (c) { pass++; console.log('  ✓ ' + label
     await page.waitForTimeout(3900);
     let r = await ro('cloud');
     ok(r[0] === '2.00km' && r[1] === '10.0℃' && r[2] === '14.0℃', '2 km: 공기 10 ℃ · 주위 14 ℃', r);
+    const sceneTxt = () => ev(() => [...document.querySelectorAll('#lab-cloud .scene-pane svg text')].filter(t => t.getAttribute('opacity') !== '0' && t.closest('g')?.getAttribute('opacity') !== '0').map(t => t.textContent).join('|'));
+    let st4 = await sceneTxt();
+    ok(/공기 30\.0 ℃/.test(st4) && /공기 20\.0 ℃/.test(st4), '지나온 높이마다 공기 덩어리 기온 표시 (30 ℃ · 20 ℃)', st4.slice(0, 160));
+    ok(/층운형 구름/.test(st4), '응결 고도(2 km)에 닿으면 층운형 구름', st4.slice(0, 200));
     await ev('App.TABS.cloud.api.release()'); await page.waitForTimeout(900);
     let z = await ev('App.TABS.cloud.api.cur().z');
     ok(z < 2, '2 km에서 놓으면 하강', z);
@@ -177,6 +181,12 @@ const ok = (c, label, detail) => { if (c) { pass++; console.log('  ✓ ' + label
     z = await ev('App.TABS.cloud.api.cur().z');
     ok(z > 3.5, '3.5 km에서 놓으면 상승', z);
     await page.waitForTimeout(9000);
+    st4 = await sceneTxt();
+    ok(/층운형 → 적운형/.test(st4), '조건부 불안정: 강제로 올려 층운형 → 저절로 올라가 적운형', st4.slice(0, 200));
+    const card3 = await ev(() => document.querySelector('#lab-cloud .case-cond').textContent);
+    ok(/건조 단열 감률/.test(card3) && /상승 응결 고도/.test(card3) && /저절로/.test(card3) && /관찰 ✓/.test(card3), '③ 조건부 불안정 카드의 빈칸이 채워짐', card3.slice(0, 120));
+    const card1 = await ev(() => !!document.querySelector('#lab-cloud .case-stable .blank.filled'));
+    ok(card1 === false, '관찰하지 않은 ① 절대 안정 카드는 빈칸 그대로');
     r = await ro('cloud');
     ok(/표시 범위/.test(r.guide) && r[0] === '6.00km', '상한 도달: "표시 범위에 도달했어요"', r);
     // 되감기

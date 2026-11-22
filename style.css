@@ -209,6 +209,24 @@ table.stab-table { width: 100%; border-collapse: separate; border-spacing: 0; fo
 .zone-body { font-size: 14.5px; color: var(--ink-2); grid-column: 1; }
 .zone-row.cur { border-color: #9CCFC6; background: #F7FBFA; }
 
+/* 4. 구름의 종류: 세 가지 대기 카드 (교과서 그림 · 학습지 빈칸) */
+.case-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 10px; margin-top: 8px; }
+.case { border: 1px solid #EFECE5; border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.case.cur { border-color: #9CCFC6; background: #F7FBFA; box-shadow: inset 0 0 0 1px #9CCFC6; }
+.case-head { display: flex; align-items: center; gap: 8px; font-size: 16px; }
+.case-n { font-size: 18px; font-weight: 800; color: var(--tab-on-ink); }
+.case-ok { margin-left: auto; font-size: 13px; font-weight: 800; padding: 2px 9px; border-radius: 99px; background: #E2F1E7; color: var(--ok); white-space: nowrap; }
+.case-range { font-size: 14px; font-weight: 700; color: var(--muted); }
+.case-stable .case-range { color: #1F5A88; }
+.case-unstable .case-range { color: #9C3B2E; }
+.case-cond .case-range { color: #2E6A2A; }
+.case-lines { margin: 4px 0 2px; padding-left: 18px; font-size: 14.5px; line-height: 1.55; word-break: keep-all; }
+.case-lines li { margin: 3px 0; }
+.case .ch-row { margin-top: auto; padding-top: 4px; }
+.case-d { font-size: 13px; color: var(--muted); line-height: 1.4; }
+.nw { white-space: nowrap; }
+.cloud-sh { filter: drop-shadow(0 1px 2.5px rgba(40, 62, 84, .35)); }
+
 /* ───────── 현재 수치 ───────── */
 .readouts { display: grid; grid-template-columns: repeat(var(--cells, 5), 146px) minmax(240px, 1fr); gap: 0; margin-top: 10px; background: #fff; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 .ro { padding: 6px 14px 7px; border-right: 1px solid #EFECE5; min-width: 0; }
