@@ -28,8 +28,8 @@ const FogLab = (function () {
     steam: ['육지 위', '수면 위'], frontal: ['비 내리기 시작', '비가 계속 내린 뒤']
   };
   const DEF = { kind: 'radiation', sky: 'clear', wind: 'calm', sea: 12, M: 0.8, water: 15, rain: 'strong' };
-  const DUR = 9;                                        // 처음부터 끝까지 재생 시간(초)
-  const HOLD = 2.2;                                     // 재생 중 안개가 생기기 시작한 순간에 잠깐 머무는 시간(초)
+  // 재생 빠르기: 포화(안개 시작)까지는 길어도 PRE_MAX초 안에 지나가고, 안개가 짙어지는 과정은 적어도 POST_MIN초 동안 보여 준다
+  const DUR = 9, PRE_MAX = 3.5, POST_MIN = 3.5, DUR_NONE = 6;   // DUR: 기본 재생 시간(초), DUR_NONE: 안개가 생기지 않는 조건의 재생 시간
   const XR = { min: -5, max: 25, step: 5 }, YR = { min: 0, max: 32, step: 5 };
   const C_SAT = '#2F78B5';
   const L = Object.assign(baseLab(), { id: 'fog' });
@@ -37,7 +37,7 @@ const FogLab = (function () {
   L.st = st;
   let sh, ui = {}, E = {}, G = null, ch = null;
   // 장면의 움직임: tm = 흐른 시간(초, 바람 · 물결 · 빗방울 · 안개의 흐름), vis = 지금 화면에 보이는 안개의 양(0~1, 목표값을 천천히 따라감)
-  let tm = 0, vis = 0, hold = 0, idle = 0, cur = null;
+  let tm = 0, vis = 0, idle = 0, cur = null;
   const fogAmount = a => a.saturated ? clamp(0.35 + a.water / 1.4, 0.35, 1) : 0;
 
   const opt = (o) => { o = o || st; return { sky: o.sky, wind: o.wind, sea: o.sea, M: o.M, water: o.water, rain: o.rain }; };
@@ -64,9 +64,9 @@ const FogLab = (function () {
   function play() {
     if (st.playing) { pause(); return; }
     if (st.s >= 1 - 1e-9) setS(0);
-    hold = 0; st.playing = true; render();
+    st.playing = true; render();
   }
-  function pause() { hold = 0; if (st.playing) { st.playing = false; render(); } }
+  function pause() { if (st.playing) { st.playing = false; render(); } }
   function step(d) {
     pause();
     const S = stageList();
@@ -79,25 +79,25 @@ const FogLab = (function () {
     if (i === 1 && on == null) { st.notice = noFogText(); render(); return; }
     setS([0, on, 1][i]);
   }
+  /** 재생할 때 1초에 나아가는 진행 정도 */
+  function playRate() {
+    const on = onset();
+    if (on == null) return 1 / DUR_NONE;
+    if (on <= 1e-6 || on >= 1 - 1e-6) return 1 / DUR;
+    return st.s < on - 1e-9 ? Math.max(1 / DUR, on / PRE_MAX) : Math.min(1 / DUR, (1 - on) / POST_MIN);
+  }
   function tick(dt) {
-    if (!REDUCED_MOTION) {
-      tm += dt;
-      const tgt = cur ? cur.dens : 0;                    // 안개는 갑자기 나타나지 않고 서서히 피어오르고 서서히 걷힌다
-      vis = Math.abs(tgt - vis) < 1e-3 ? tgt : vis + (tgt - vis) * (1 - Math.exp(-dt / (tgt > vis ? 0.8 : 0.4)));
-    }
-    if (st.playing && hold <= 0) {
-      const nextStop = stageList().find(v => v > st.s + 1e-9) ?? 1;
-      const ns = Math.min(nextStop, st.s + dt / DUR);
-      if (ns >= nextStop - 1e-12) {
-        if (nextStop < 1 - 1e-9) hold = HOLD;            // 안개가 생기기 시작한 순간: 잠깐 머물러 안개가 피어오르는 것을 보여 주고 이어서 진행
-        else st.playing = false;
-        setS(nextStop);
-      } else setS(ns);
+    // 「움직임 줄이기」 설정에서도 재생을 누른 동안에는 비 · 바람 · 안개가 움직인다 (멈춰 있을 때만 정지 그림)
+    if (st.playing || !REDUCED_MOTION) tm += dt;
+    const tgt = cur ? cur.dens : 0, settling = Math.abs(tgt - vis) >= 1e-3;   // 안개는 갑자기 나타나지 않고 서서히 피어오르고 서서히 걷힌다
+    vis = settling ? vis + (tgt - vis) * (1 - Math.exp(-dt / (tgt > vis ? 0.8 : 0.4))) : tgt;
+    if (st.playing) {                                    // 처음부터 끝까지 끊지 않고 이어서 재생
+      const ns = st.s + dt * playRate();
+      if (ns >= 1 - 1e-12) { st.playing = false; setS(1); } else setS(ns);
       return;                                            // setS가 장면까지 다시 그림
     }
-    if (st.playing) { hold -= dt; if (!REDUCED_MOTION) drawScene(); return; }
-    if (REDUCED_MOTION) return;
-    idle += dt;                                          // 멈춰 있을 때도 바람 · 물결 · 안개는 천천히 흐른다 (초당 30번)
+    if (REDUCED_MOTION) { if (settling) drawScene(); return; }
+    idle += dt;                                          // 멈춰 있을 때도 비 · 바람 · 물결 · 안개는 천천히 움직인다 (초당 30번)
     if (idle >= 1 / 30) { idle = 0; drawScene(); }
   }
   function resetMotion() { pause(); st.s = 0; st.notice = ''; L.emit('reset'); render(); }
@@ -159,7 +159,7 @@ const FogLab = (function () {
     ]);
     // 아래 조작은 「재생」과 「다음 단계」만 (처음 → 안개가 생기기 시작한 순간 → 끝)
     ui.play = Btn('▶ 재생', 'primary play', play);
-    ui.next = Btn('다음 단계 ▶', '', () => step(1), { title: '처음 → 안개가 생기기 시작한 순간 → 끝' });
+    ui.next = Btn('다음 단계 ▶', '', () => step(1), { title: '처음 → 안개가 생기기 시작한 순간 → 끝 (재생은 멈추지 않고 끝까지 이어져요)' });
     ui.stepHint = h('span', { class: 'rel-hint show' });
     sh.ctrl.classList.add('act-bar');
     sh.ctrl.append(ui.play, ui.next, ui.stepHint);
@@ -746,9 +746,9 @@ const FogLab = (function () {
       const R = rng(9), nDrop = st.rain === 'strong' ? 46 : 16;
       for (let i = 0; i < nDrop; i++) {
         const x = W * 0.36 + R() * (W * 0.62), yTop = Math.max(g.top + 60, fr.yR - 10), yBot = yG - 4;
-        const tt = frac(R() + tm * (0.5 + 0.2 * R())), y = lerp(yTop, yBot, tt), yF = fr.yAt(x);
+        const tt = frac(R() + tm * (1.0 + 0.5 * R())), y = lerp(yTop, yBot, tt), yF = fr.yAt(x);
         const inCold = y > yF, k = inCold ? clamp(1 - (y - yF) / Math.max(30, yBot - yF), 0.2, 1) : 1;
-        s('path', { d: `M${x.toFixed(1)} ${y.toFixed(1)} l-2.5 ${(10 * k).toFixed(1)}`, stroke: '#3E6E9C', 'stroke-width': (2.2 * Math.sqrt(k)).toFixed(2), 'stroke-linecap': 'round', opacity: (0.9 * smooth(tt / 0.06)).toFixed(2) }, E.dyn);
+        s('path', { d: `M${x.toFixed(1)} ${y.toFixed(1)} l-3 ${(13 * k).toFixed(1)}`, stroke: '#3E6E9C', 'stroke-width': (2.2 * Math.sqrt(k)).toFixed(2), 'stroke-linecap': 'round', opacity: (0.9 * smooth(tt / 0.06)).toFixed(2) }, E.dyn);
         if (inCold && k < 0.5 && i % 3 === 0) s('circle', { cx: x + 3, cy: y - 4, r: 2.2, fill: 'none', stroke: '#8FB4D6', 'stroke-width': 1.2 }, E.dyn);
       }
       lbl(E.dyn, W - 8, fr.yR + (yG - fr.yR) * 0.42 + 20, '빗방울 증발', '#2F5E88', { 'text-anchor': 'end' });
@@ -807,7 +807,6 @@ const FogLab = (function () {
   function drawScene() {
     if (!cur || !sh || !sh.frame) return;
     const g = sceneGeo(sh.frame), a = cur.a;
-    if (REDUCED_MOTION) vis = cur.dens;                    // 움직임 줄이기: 안개를 바로 그 상태로
     clear(E.back); clear(E.dyn); clear(E.fog); clear(E.top);
     const sc = SCENE[st.kind](g, a, cur.on, cur.dens, vis), info = sc.info;
     cur.info = info;
@@ -923,6 +922,6 @@ const FogLab = (function () {
     pause() { pause(); },
     onShow() { layout(); },
     hasFrame: () => !!(sh && sh.frame),
-    api: { setS, setKind, setCond, play, step, goStage, resetMotion, resetDefaults, st, state: () => A(), onset: () => onset(), view: () => ({ vis, tm, hold }) }
+    api: { setS, setKind, setCond, play, step, goStage, resetMotion, resetDefaults, st, state: () => A(), onset: () => onset(), view: () => ({ vis, tm }) }
   };
 })();

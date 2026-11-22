@@ -267,12 +267,24 @@ const ok = (c, label, detail) => { if (c) { pass++; console.log('  ✓ ' + label
     const d0 = await fogDom(); await page.waitForTimeout(400); const d1 = await fogDom();
     ok(d0 !== d1 && !(await ev(`${F}.st.playing`)), '멈춰 있어도 안개가 천천히 흐름', d0.slice(0, 40));
     const on = await ev(`${F}.onset()`);
-    await ev(`${F}.setS(${on} - 0.03)`); await ev(`${F}.play()`); await page.waitForTimeout(1100);
+    await ev(`${F}.setS(0)`); await ev(`${F}.play()`); await page.waitForTimeout(4300);
     const mid = await ev(`[${F}.st.s, ${F}.st.playing]`);
-    ok(Math.abs(mid[0] - on) < 1e-9 && mid[1] === true, '재생: 안개가 생기기 시작한 순간에 잠깐 머묾 (재생 상태 그대로)', mid);
-    await page.waitForTimeout(4200);
+    ok(mid[0] > on && mid[0] < 1 && mid[1] === true, '재생: 4초 안에 포화에 이르고, 안개가 생기는 순간에도 멈추지 않고 이어짐', { mid, on });
+    await page.waitForTimeout(3300);
     const fin = await ev(`[${F}.st.s, ${F}.st.playing]`);
-    ok(fin[0] === 1 && fin[1] === false, '재생: 머문 뒤 스스로 이어져 끝(새벽 5시)에서 멈춤', fin);
+    ok(fin[0] === 1 && fin[1] === false, '재생: 끝(새벽 5시)까지 가서 멈춤', fin);
+    // 전선 안개: 비가 내림 (멈춰 있을 때도, 「움직임 줄이기」 설정에서는 재생하는 동안)
+    const rainDom = pg => pg.evaluate(() => [...document.querySelectorAll('#lab-fog .scene-pane svg path[stroke="#3E6E9C"]')].map(e => e.getAttribute('d')).join(';'));
+    await ev(`${F}.setKind('frontal')`); await page.waitForTimeout(100);
+    const r0 = await rainDom(page); await page.waitForTimeout(300); const r1 = await rainDom(page);
+    ok(r0.length > 50 && r0 !== r1, '전선 안개: 빗방울이 떨어짐 (멈춰 있을 때도)', r0.slice(0, 40));
+    const calm = await browser.newPage({ viewport: { width: 1366, height: 768 }, reducedMotion: 'reduce' });
+    await calm.route('**/cdn.jsdelivr.net/**', r => r.abort());
+    await calm.goto(url); await calm.click('#tab-btn-fog'); await calm.waitForTimeout(200);
+    await calm.evaluate(`${F}.setKind('frontal'); ${F}.play()`); await calm.waitForTimeout(300);
+    const c0 = await rainDom(calm); await calm.waitForTimeout(300); const c1 = await rainDom(calm);
+    ok(c0.length > 50 && c0 !== c1, '「움직임 줄이기」 설정에서도 재생하는 동안에는 빗방울이 떨어짐', c0.slice(0, 40));
+    await calm.close();
   }
 
   console.log('[글자 겹침]');
