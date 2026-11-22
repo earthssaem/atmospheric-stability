@@ -243,8 +243,6 @@ const ok = (c, label, detail) => { if (c) { pass++; console.log('  ✓ ' + label
     ok(r[0] === '10.0℃' && r[3] === '100%' && /포화/.test(r.guide) && /새벽/.test(clock), '다음 단계 → 안개 시작: 기온 = 이슬점 10 ℃ · 상대 습도 100 % · 새벽', { r, clock: clock.slice(0, 30) });
     await ev(`${F}.setS(1)`); r = await ro('fog');
     ok(r[0] === '9.4℃' && /안개/.test(r[4]), '새벽 5시: 9.4 ℃까지 식어 안개', r);
-    const seen = await ev(() => document.querySelector('#lab-fog .fog-table tr.cur').textContent);
-    ok(/관찰 ✓/.test(seen), '정리 표에 관찰 ✓', seen.slice(0, 40));
     await ev(`${F}.setCond({ sky: 'cloudy' })`); await ev(`${F}.setS(1)`); r = await ro('fog');
     ok(r[4] === '없음' && /생기지 않아요/.test(r.guide), '(자유 탐구) 흐린 밤: 이슬점에 닿지 않아 안개 없음', r);
     await ev(`${F}.setKind('frontal')`); await ev(`${F}.setS(1)`);
@@ -255,8 +253,8 @@ const ok = (c, label, detail) => { if (c) { pass++; console.log('  ✓ ' + label
     await ev(`${F}.setKind('steam')`); await ev(`${F}.setS(0.2)`); const a = await ro('fog');
     await ev(`${F}.setS(1)`); const b = await ro('fog');
     ok(a[0] === '2.0℃' && b[0] === '2.0℃' && parseFloat(b[2]) > parseFloat(a[2]) && b[3] === '100%', '증발 안개: 기온 2 ℃ 그대로, 수증기압이 늘어 포화', { a, b });
-    const cur = await ev(() => document.querySelector('#lab-fog .fog-table tr.cur .fog-n').textContent);
-    ok(/증발 안개/.test(cur), '정리 표에서 지금 안개(증발 안개) 줄 강조', cur);
+    const extra = await ev(() => [...document.querySelectorAll('#lab-fog .more summary')].map(x => x.textContent).join('|'));
+    ok(!/안개란|정리/.test(extra) && /자유 탐구/.test(extra), '아래 부가 설명(안개란? · 정리 표) 없음, 「자유 탐구 · 도전」만', extra);
     // 안개는 갑자기 나타나지 않고 서서히 피어오르며, 멈춰 있어도 장면은 천천히 흐른다
     await ev(`${F}.setKind('radiation')`); await ev(`${F}.resetDefaults()`); await ev(`${F}.step(1)`);   // 앞에서 바꾼 「흐림」을 기본값(맑음 · 바람 약함)으로
     const v0 = await ev(`${F}.view().vis`); await page.waitForTimeout(1800);

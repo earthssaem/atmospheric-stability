@@ -33,7 +33,7 @@ const FogLab = (function () {
   const XR = { min: -5, max: 25, step: 5 }, YR = { min: 0, max: 32, step: 5 };
   const C_SAT = '#2F78B5';
   const L = Object.assign(baseLab(), { id: 'fog' });
-  const st = Object.assign({}, DEF, { s: 0, playing: false, notice: '', seen: {} });
+  const st = Object.assign({}, DEF, { s: 0, playing: false, notice: '' });
   L.st = st;
   let sh, ui = {}, E = {}, G = null, ch = null;
   // 장면의 움직임: tm = 흐른 시간(초, 바람 · 물결 · 빗방울 · 안개의 흐름), vis = 지금 화면에 보이는 안개의 양(0~1, 목표값을 천천히 따라감)
@@ -57,7 +57,7 @@ const FogLab = (function () {
     v = clamp(v, 0, 1);
     const was = st.s, on = onset();
     st.s = v; st.notice = '';
-    if (on != null && was < on - 1e-9 && v >= on - 1e-9) { st.seen[st.kind] = true; L.emit('fogStart', { kind: st.kind, key: condKey() }); renderTable(true); }
+    if (on != null && was < on - 1e-9 && v >= on - 1e-9) L.emit('fogStart', { kind: st.kind, key: condKey() });
     if (v >= 1 - 1e-9 && was < 1 - 1e-9) L.emit('fogEnd', { kind: st.kind, formed: on != null, key: condKey(), M: st.M, H: A(1).H, sky: st.sky, wind: st.wind });
     render();
   }
@@ -110,7 +110,6 @@ const FogLab = (function () {
     buildCond();
     L.emit('kind', { kind: k });
     rebuildAll();
-    renderTable(true);
   }
   function setCond(o) {
     pause();
@@ -195,36 +194,11 @@ const FogLab = (function () {
 
   function buildMore() {
     const m = sh.more;
-    m.appendChild(Fold('안개란? · 안개와 구름', h('div', { html: `
-      <p><b>안개</b>: 지표면 부근에서 수증기가 응결해 생긴 작은 물방울이 공기 중에 떠 있는 것</p>
-      <p>안개와 구름은 본질적으로 같아요. 안개는 수증기가 <b>지표 부근</b>에서 응결한 것이고, 구름은 공기 덩어리가 상승하면서 <b>단열 팽창</b>해 높은 고도에서 수증기가 응결한 것이에요.</p>
-      <p>공기가 <b>포화</b>되면 안개가 생겨요. 포화되는 방법은 두 가지예요.</p>
-      <ul><li><b>공기의 냉각</b>: 수증기량은 그대로인 채 기온이 이슬점까지 내려감 → 그래프의 점이 <b>왼쪽</b>으로 가서 곡선에 닿아요.</li>
-      <li><b>수증기량의 증가</b>: 기온은 그대로인 채 수증기가 늘어남 → 그래프의 점이 <b>위쪽</b>으로 가서 곡선에 닿아요.</li></ul>
-      <p class="note">곡선에 닿은 뒤 더 냉각되거나 수증기가 더 들어오면, 남는 수증기가 응결해 안개가 짙어져요. (장면의 안개·구름·빗방울은 정성적 표현)</p>` }), true));
-    ui.table = h('div');
-    m.appendChild(Fold('안개의 종류 정리', ui.table, true, 'wide'));
     ui.chBox = h('div');
     m.appendChild(Fold('자유 탐구 · 도전 <span class="tag">조건 바꾸기 · 도전 2</span>', h('div', null,
       h('p', { class: 'note', text: '조건을 바꿔 안개가 생기지 않는 경우와 비교해 볼 수 있어요. 조건을 바꾸면 처음부터 다시 봐요.' }),
       ui.condBox, h('div', { class: 'ch-row' }, Btn('조건 기본값', 'sm', resetDefaults)),
       h('div', { class: 'more-sec' }, h('h4', { text: '도전' }), ui.chBox)), false));
-    renderTable(true);
-  }
-  function renderTable(force) {
-    if (!ui.table) return;
-    const key = [st.kind, JSON.stringify(st.seen)].join('|');
-    if (!force && ui.table.dataset.key === key) return;
-    ui.table.dataset.key = key;
-    const row = (x, first, n, cap) => `<tr class="${x.k === st.kind ? 'cur' : ''}">${first ? `<th rowspan="${n}" class="fog-g fog-${x.group}">${cap}</th>` : ''}
-      <td class="fog-n">${x.name}${st.seen[x.k] ? ' <span class="case-ok">관찰 ✓</span>' : ''}</td><td>${DESC[x.k]}</td>
-      <td class="fog-b"><button type="button" class="btn sm${x.k === st.kind ? ' accent' : ''}" data-k="${x.k}">보기</button></td></tr>`;
-    const cool = KINDS.filter(x => x.group === 'cool'), vap = KINDS.filter(x => x.group === 'vapor');
-    ui.table.innerHTML = `<table class="fog-table"><tbody>
-      ${cool.map((x, i) => row(x, i === 0, cool.length, '공기의 냉각으로<br>생성되는 안개')).join('')}
-      ${vap.map((x, i) => row(x, i === 0, vap.length, '수증기량의 증가로<br>생성되는 안개')).join('')}
-      </tbody></table><p class="note">교과서 그림 Ⅲ-18 복사 안개 · Ⅲ-19 이류 안개 · Ⅲ-20 활승 안개. 안개가 생기는 순간까지 진행하면 「관찰 ✓」이 붙어요.</p>`;
-    ui.table.querySelectorAll('button[data-k]').forEach(b => b.addEventListener('click', () => { setKind(b.dataset.k); sh.panel.scrollIntoView({ behavior: REDUCED_MOTION ? 'auto' : 'smooth', block: 'center' }); }));
   }
   function buildChallenges() {
     ch = Challenges(ui.chBox, L, [
