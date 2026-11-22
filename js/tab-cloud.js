@@ -16,6 +16,7 @@ const CloudLab = (function () {
   const PRESETS = [{ g: 4, label: '4 절대 안정' }, { g: 8, label: '8 조건부 불안정' }, { g: 12, label: '12 절대 불안정' }];
   const INV_EX = { base: 1.5, depth: 0.5, dT: 4 };
   const L = Object.assign(baseLab(), { id: 'cloud' });
+  const CASE_BTNS = [{ g: 4, k: 'absolute-stable', t: '절대 안정' }, { g: 8, k: 'conditional', t: '조건부 불안정' }, { g: 12, k: 'absolute-unstable', t: '절대 불안정' }];
   const st = {
     T0: DEF.T0, Td0: DEF.Td0, gamma: DEF.gamma,
     inv: { on: false, base: INV_EX.base, depth: INV_EX.depth, dT: INV_EX.dT },
@@ -172,7 +173,7 @@ const CloudLab = (function () {
   }
   /** 시간이 흐르는 중인가: 움직이는 중이거나, 기록을 이어 보는 중이거나, 붙잡아 두고 관찰하는 중 */
   function active() { const r = st.run, p = cur().phase; return st.idx < r.frames.length - 1 || p === 'hold' || p === 'drag' || !r.settled; }
-  function pause() { if (st.holdBtn) holdEnd(); if (st.drag) dragEnd(); if (!st.paused) { st.paused = true; render(); } }
+  function pause() { if (st.holdBtn) holdEnd(); if (st.drag) dragEnd(); }    // 재생 버튼이 없는 탭: 다른 탭에 있는 동안은 계산하지 않고, 돌아오면 이어서 움직임
   function resetMotion() { newRun(); st.paused = false; st.notice = ''; L.emit('reset'); render(); }
   function seek(i) { st.idx = clamp(Math.round(i), 0, st.run.frames.length - 1); st.paused = true; render(); }
   function step(d) {
@@ -221,7 +222,7 @@ const CloudLab = (function () {
   function resetDefaults() {
     Object.assign(st, { T0: DEF.T0, Td0: DEF.Td0, gamma: DEF.gamma, target: 2, showPath: false, notice: '' });
     st.inv = { on: false, base: INV_EX.base, depth: INV_EX.depth, dT: INV_EX.dT };
-    ui.T0.set(DEF.T0); ui.Td0.setMax(DEF.T0); ui.Td0.set(DEF.Td0); ui.g.set(DEF.gamma); ui.tz.set(2); ui.tPath.set(false);
+    ui.T0.set(DEF.T0); ui.Td0.setMax(DEF.T0); ui.Td0.set(DEF.Td0); ui.g.set(DEF.gamma); ui.tz.set(2);
     syncInvUI();
     conditionsChanged();
   }
@@ -242,56 +243,44 @@ const CloudLab = (function () {
       sceneTitle: '대기 단면', graphTitle: '높이–온도 그래프',
       sceneLabel: '공기 덩어리와 주위 대기의 단면', graphLabel: '공기 덩어리 기온과 주위 기온의 높이에 따른 변화'
     });
+    // 위쪽: 세 가지 대기 버튼만 (지표 공기 · 감률 직접 정하기 · 비교 · 역전층은 아래 「자유 탐구 · 도전」)
+    ui.preset = (function () {
+      const el = h('span', { class: 'case-btns', role: 'group', 'aria-label': '대기 고르기' });
+      const btns = CASE_BTNS.map(c => { const bt = Btn(`${c.t}<small>기온 감률 ${c.g} ℃/km</small>`, '', () => setCond({ gamma: c.g })); el.appendChild(bt); return bt; });
+      return { el, set() { const k = Physics.stabilityClass(st.gamma).key; btns.forEach((bt, i) => { const on = CASE_BTNS[i].k === k && !st.inv.on; bt.classList.toggle('on', on); bt.setAttribute('aria-pressed', on ? 'true' : 'false'); }); } };
+    })();
+    ui.condInfo = h('span', { class: 'cond-info' });
+    sh.cond.append(h('div', { class: 'nf' }, h('span', { class: 'nf-label', text: '대기' }), ui.preset.el), ui.condInfo);
     ui.T0 = NumField({ label: '지표 기온 T<sub>0</sub>', min: 10, max: 40, step: 0.1, sliderStep: 0.5, decimals: 1, value: st.T0, unit: '℃', cls: 'tight', onCommit: v => setCond({ T0: v }) });
     ui.Td0 = NumField({ label: '지표 이슬점 Td<sub>0</sub>', min: 0, max: st.T0, step: 0.1, sliderStep: 0.5, decimals: 1, value: st.Td0, unit: '℃', cls: 'tight', onCommit: v => setCond({ Td0: v }) });
     ui.g = NumField({ label: '주위 기온 감률 γ', min: 2, max: 14, step: 0.1, sliderStep: 0.5, decimals: 1, value: st.gamma, unit: '℃/km', cls: 'tight', onCommit: v => setCond({ gamma: v }) });
     ui.T0.range.style.setProperty('--c', 'var(--temp)');
     ui.Td0.range.style.setProperty('--c', 'var(--dew)');
     ui.g.range.style.setProperty('--c', 'var(--env)');
-    // 대표 감률 4 · 8 · 12 (지표 공기는 그대로 두고 주위 대기만 바꿈)
-    ui.preset = (function () {
-      const el = h('span', { class: 'presets', role: 'group', 'aria-label': '대표 감률 (같은 공기, 다른 대기)' });
-      const btns = PRESETS.map(p => { const bt = Btn(String(p.g), 'sm', () => setCond({ gamma: p.g }), { title: `γ = ${p.g} ℃/km · ${p.label.replace(/^\d+ /, '')}`, 'aria-label': `감률 ${p.g} ℃/km ${p.label.replace(/^\d+ /, '')}` }); el.appendChild(bt); return bt; });
-      return { el, set(v) { btns.forEach((bt, i) => { const on = v != null && Math.abs(PRESETS[i].g - v) < 1e-9; bt.classList.toggle('on', on); bt.setAttribute('aria-pressed', on ? 'true' : 'false'); }); } };
-    })();
-    ui.preset.set(st.gamma);
-    ui.g.el.appendChild(ui.preset.el);
-    const tail = h('div', { class: 'cond-tail' });
-    ui.cmp = CompareUI(tail, saveCompare, () => { st.cmp = null; afterCompareChange(); });
-    sh.cond.append(h('div', { class: 'cond-group' }, ui.T0.el, ui.Td0.el, ui.g.el), tail);
+    ui.preset.set();
 
-    ui.badge = h('span', { class: 'stab-badge' });
+    ui.badge = h('span', { class: 'stab-badge' });      // 대표 감률이 아니거나 역전층을 넣었을 때만 보임
     sh.sceneHead.append(ui.badge);
-    ui.tPath = Toggle('예상 경로와 판정 보기', st.showPath, v => { st.showPath = v; render(); });
     ui.legend = h('span', { class: 'legend' });
     sh.graphLegend.append(ui.legend);
-    sh.graphHead.insertBefore(ui.tPath.el, sh.graphLegend);
 
     ui.ro = Readouts(sh.ro, [
       { key: 'z', label: '높이' },
       { key: 'Tp', label: '<i style="border-color:var(--temp)"></i>공기 덩어리 기온', cls: 'temp' },
       { key: 'Te', label: '<i style="border-color:var(--env)"></i>주위 기온', cls: 'env' },
-      { key: 'd', label: '차이 (공기 − 주위)' },
-      { key: 'm', label: '운동' }
+      { key: 'cloud', label: '구름' }
     ]);
-    ui.ctrl = ControlBar(sh.ctrl, { play, prev: () => step(-1), next: () => step(1), reset: resetMotion, defaults: resetDefaults });
-    ui.ctrl.prev.innerHTML = '◀ 이전 단계'; ui.ctrl.next.innerHTML = '다음 단계 ▶';
-    ui.ctrl.prev.title = ui.ctrl.next.title = '기록에서 출발 · 놓은 순간 · 방향이 바뀐 순간 · 멈춘 순간으로 이동';
-    ui.tl = h('input', { type: 'range', min: 0, max: 0, step: 1, value: 0, 'aria-label': '기록 되감기' });
-    ui.tl.style.setProperty('--c', 'var(--ink)');
-    ui.tl.addEventListener('input', () => seek(+ui.tl.value));
-    ui.ctrl.slot.append(h('div', { class: 'progress' }, h('span', { class: 'lbl', text: '기록' }), ui.tl));
-    // 공기 덩어리 조작 줄: 올리기·내리기 → (손을 떼면 붙잡아 둠) → 놓기
-    ui.tz = NumField({ label: '목표 높이', min: 0, max: ZMAX, step: 0.01, decimals: 2, value: st.target, unit: 'km', cls: 'compact', onCommit: v => { st.target = v; render(); } });
-    ui.lift = Btn('공기 올리기', 'accent', () => liftTo(st.target));
-    ui.hold = Btn('꾹 눌러 올리기', '', null, { title: '누르고 있는 동안 올라가고, 손을 떼면 그 높이에 붙잡아 둬요 (Space·Enter 키도 가능)' });
+    // 조작은 한 줄: 꾹 눌러 올리기(또는 끌기) → (손을 떼면 붙잡아 둠) → 놓기, 처음으로
+    ui.hold = Btn('▲ 꾹 눌러 올리기', 'accent', null, { title: '누르고 있는 동안 올라가고, 손을 떼면 그 높이에 붙잡아 둬요 (Space·Enter 키도 가능)' });
     holdButton(ui.hold, holdStart, holdEnd);
     ui.rel = Btn('놓기', 'primary', release);
-    ui.relHint = h('span', { class: 'rel-hint', text: '놓으면 공기 덩어리가 어떻게 움직이는지 관찰하세요.' });
-    ui.manip = h('div', { class: 'ctrl-bar manip-bar', role: 'group', 'aria-label': '공기 덩어리 조작' },
-      h('span', { class: 'manip-title', text: '공기 덩어리' }), ui.tz.el, ui.lift, ui.hold, h('span', { class: 'manip-sep', 'aria-hidden': 'true' }), ui.rel, ui.relHint);
-    sh.ctrl.after(ui.manip);
-    sh.bottomEl = ui.manip;
+    ui.relHint = h('span', { class: 'rel-hint show' });
+    ui.reset = Btn('↺ 처음으로', '', resetMotion, { title: '공기 덩어리를 지표로 되돌려요' });
+    sh.ctrl.classList.add('act-bar');
+    sh.ctrl.append(ui.hold, ui.rel, ui.relHint, h('div', { class: 'tail' }, ui.reset));
+    // 자유 탐구용: 목표 높이까지 정확히 올리기
+    ui.tz = NumField({ label: '목표 높이', min: 0, max: ZMAX, step: 0.01, decimals: 2, value: st.target, unit: 'km', cls: 'compact', onCommit: v => { st.target = v; render(); } });
+    ui.lift = Btn('공기 올리기', 'sm accent', () => liftTo(st.target));
 
     buildMore();
     buildChallenges();
@@ -328,7 +317,14 @@ const CloudLab = (function () {
       h('div', { class: 'ch-row' }, ui.invOn.el, ex),
       h('div', { class: 'inv-fields' }, ui.invBase.el, ui.invDepth.el, ui.invDT.el), ui.invInfo,
       h('p', { class: 'note', html: '맑고 바람이 약한 새벽 지표 부근에 잘 생기고, 오염 물질이 잘 퍼지지 못해요. (교과서 95쪽)' }));
-    m.appendChild(Fold('더 해 보기 <span class="tag">도전 · 역전층</span>', h('div', null, ui.chBox, invSec), false));
+    const cmpRow = h('div', { class: 'ch-row' });
+    ui.cmp = CompareUI(cmpRow, saveCompare, () => { st.cmp = null; afterCompareChange(); });
+    const freeSec = h('div', null,
+      h('p', { class: 'note', text: '지표 공기와 감률을 직접 정하거나, 원하는 높이까지 정확히 올리거나, 결과를 옅은 선으로 남겨 비교할 때 써요.' }),
+      h('div', { class: 'inv-fields' }, ui.T0.el, ui.Td0.el, ui.g.el),
+      h('div', { class: 'ch-row' }, ui.tz.el, ui.lift),
+      cmpRow, h('div', { class: 'ch-row' }, Btn('조건 기본값', 'sm', resetDefaults)));
+    m.appendChild(Fold('자유 탐구 · 도전 <span class="tag">조건 직접 정하기 · 비교 · 도전 · 역전층</span>', h('div', null, freeSec, h('div', { class: 'more-sec' }, h('h4', { text: '도전' }), ui.chBox), invSec), false));
     syncInvUI();
   }
   function syncInvUI() {
@@ -342,7 +338,7 @@ const CloudLab = (function () {
       {
         id: 'lfc', title: '저절로 올라가기 시작하는 높이 찾기',
         goal: '<b>조건부 불안정</b> 대기에서 공기 덩어리를 <b>되도록 낮은 곳</b>에서 놓아, 강제로 올리는 힘 없이 <b>저절로 올라가</b> 적운형 구름이 생기게 하세요. (그 높이보다 0.3 km 이내에서 놓기)',
-        hints: ['응결 고도 위에서 공기 덩어리 기온과 주위 기온을 높이마다 비교해 보세요.', '공기 덩어리가 주위보다 따뜻해지기 시작하는 높이를 자유 대류 고도라고 해요.', '「예상 경로와 판정 보기」를 켜면 자유 대류 고도가 보여요. 그 바로 위까지 올렸다 놓아 보세요.'],
+        hints: ['응결 고도 위에서 공기 덩어리 기온과 주위 기온을 높이마다 비교해 보세요.', '공기 덩어리가 주위보다 따뜻해지기 시작하는 높이를 자유 대류 고도라고 해요.', '그래프에 표시된 자유 대류 고도 바로 위까지 올렸다 놓아 보세요.'],
         check(lab, since) {
           const rel = lab.since(since, 'release').filter(e => e.cls === 'conditional' && !e.inv && e.lfc != null && e.z >= e.lfc - 1e-9 && e.z <= e.lfc + 0.3);
           if (!rel.length) return false;
@@ -394,19 +390,10 @@ const CloudLab = (function () {
     E.trail = s('line', { stroke: '#4E5D6A', 'stroke-width': 2, 'stroke-dasharray': '2 5', 'stroke-linecap': 'round', opacity: 0.85 }, svg);
     E.marks = s('g', null, svg); E.marksKey = null; E.markEls = [];   // 지나온 높이(1 km마다)의 공기 덩어리 기온
     E.sNow = s('line', { 'data-role': 'now', x1: 0, x2: W, stroke: 'var(--ink)', 'stroke-width': 1.2, opacity: 0.45 }, svg);
-    E.sNowTag = s('g', null, svg);
-    E.sNowBg = s('rect', { rx: 6, height: 24, width: 70, fill: '#fff', stroke: '#C9C4B8' }, E.sNowTag);
-    E.sNowT = txt({ class: 'lb-sm tnum', 'text-anchor': 'end' }, '', E.sNowTag);
     E.buoy = s('g', null, svg);      // 부력 (힘)
     E.buoyP = s('path', { fill: '#1E6E64' }, E.buoy);
     E.buoyT = txt({ class: 'lb-sm halo-sky', fill: '#1E6E64' }, '부력', E.buoy);
-    E.vel = s('g', null, svg);       // 이동 방향 (속도)
-    E.velP = s('path', { fill: 'none', stroke: '#4E5D6A', 'stroke-width': 2.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-dasharray': '5 3' }, E.vel);
-    E.velT = txt({ class: 'lb-sm halo-sky', fill: '#4E5D6A', 'text-anchor': 'end' }, '이동', E.vel);
     E.parcel = makeParcel(svg, { seed: 11, drag: true });
-    // 조작 중 · 붙잡아 둔 동안만 보이는 보조 테두리 (공기 덩어리 경계 바깥, 크기를 따라감)
-    E.ring = s('circle', { r: 24, fill: 'none', stroke: '#3B5266', 'stroke-width': 1.75, class: 'manip-ring', opacity: 0 }, E.parcel.g);
-    E.status = txt({ class: 'manip-status halo-sky', 'text-anchor': 'middle' }, '', svg);
     E.envLbls = [...svg.querySelectorAll('text')].filter(t => t.textContent.startsWith('주위 '));
     E.px = W * 0.38;
     sa(E.parcel.g, { tabindex: 0, role: 'slider', 'aria-label': '공기 덩어리 높이 (끌거나 위·아래 화살표 키로 올리고 내리기)', 'aria-valuemin': 0, 'aria-valuemax': ZMAX });
@@ -441,14 +428,12 @@ const CloudLab = (function () {
     E.envT = txt({ class: 'lb halo', fill: 'var(--env)' }, '주위 기온', o);
     E.ghost = s('path', { fill: 'none', stroke: 'var(--temp)', 'stroke-width': 2.2, 'stroke-dasharray': '1 6', 'stroke-linecap': 'round', opacity: 0.55 }, p);
     E.Tp = s('path', { fill: 'none', stroke: 'var(--temp)', 'stroke-width': 4, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, p);
-    E.Dp = s('path', { fill: 'none', stroke: 'var(--dew)', 'stroke-width': 2.5, 'stroke-dasharray': '9 6', opacity: 0.85 }, p);
     E.TpT = txt({ class: 'lb halo', fill: 'var(--temp)', 'text-anchor': 'end' }, '공기 덩어리', o);
     E.gNow = s('line', { 'data-role': 'now', x1: ax.X0, x2: ax.X1, stroke: 'var(--ink)', 'stroke-width': 1.2, opacity: 0.45 }, p);
     E.pts = PointPair(p, { dShape: 'square' });
     E.cmpPt = s('rect', { width: 10, height: 10, fill: '#fff', stroke: 'var(--env)', 'stroke-width': 2, opacity: 0.55 }, p);
     E.lblP = txt({ class: 'lb halo', fill: 'var(--temp)' }, '', o);
     E.lblE = txt({ class: 'lb halo', fill: 'var(--env)' }, '', o);
-    E.lblD = txt({ class: 'lb halo', fill: '#4E5D6A', 'text-anchor': 'middle' }, '', o);
     E.edge = s('g', null, o);
     // 참고용 단열선
     const Hn = H(), tH = st.T0 - 10 * Hn;
@@ -492,7 +477,7 @@ const CloudLab = (function () {
     }
   }
   function renderLegend() {
-    ui.legend.innerHTML = legendHTML('var(--temp)', '', '공기 덩어리') + legendHTML('var(--dew)', 'dash', '이슬점') + legendHTML('var(--env)', '', '주위 기온') +
+    ui.legend.innerHTML = legendHTML('var(--temp)', '', '공기 덩어리') + legendHTML('var(--env)', '', '주위 기온') +
       (st.cmp ? legendHTML('var(--env)', 'dash faint', '비교(옅은 선)') : '');
   }
 
@@ -562,9 +547,6 @@ const CloudLab = (function () {
     E.parcel.set(E.px, yz, rad, par.saturated && z > Hn + 1e-9 ? clamp((z - Hn) / 1.5, 0.3, 1) : 0);
     sa(E.parcel.g, { 'aria-label': `공기 덩어리: 높이 ${fZ(z)} km, 기온 ${fT(par.T)} ℃, 주위 ${fT(env)} ℃ (끌거나 위·아래 화살표 키로 올리고 내리기)` });
     sa(E.sNow, { y1: yz, y2: yz });
-    sa(E.sNowBg, { x: f.sceneW - 76, y: yz - 12 }); sa(E.sNowT, { x: f.sceneW - 12, y: yz + 5 }); E.sNowT.textContent = `${fZ(z)} km`;
-    const manip = fr.phase === 'lift' || fr.phase === 'drag' || fr.phase === 'hold';
-    sa(E.ring, { r: (rad + 6).toFixed(1), opacity: manip ? 0.9 : 0 });
     sa(E.parcel.g, { 'aria-valuenow': z.toFixed(2) });
     const bl = Math.abs(b) < 0.05 ? 0 : clamp(10 + Math.abs(b) * 4, 14, 60);
     if (bl > 0) {
@@ -573,35 +555,22 @@ const CloudLab = (function () {
       sa(E.buoyT, { x: x + 14, y: (y1 + y2) / 2 + 5 }); E.buoyT.textContent = b > 0 ? '부력 ↑' : '부력 ↓';
       sa(E.buoy, { opacity: 1 });
     } else sa(E.buoy, { opacity: 0 });
-    // 이동 방향(속도): 자유 운동은 빠르기에 따라, 사용자가 올리거나 내리는 중에는 작고 가는 화살표. 붙잡아 둔 동안에는 없음
-    const userDir = (fr.phase === 'lift' || fr.phase === 'drag') ? fr.dir : 0;
-    const moveV = fr.phase === 'free' ? fr.v : 0;
-    if (userDir !== 0 || Math.abs(moveV) > 0.02) {
-      const up = userDir !== 0 ? userDir > 0 : moveV > 0;
-      const dir = up ? -1 : 1, len = userDir !== 0 ? 24 : clamp(12 + Math.abs(moveV) * 30, 16, 50), x = E.px - rad - 16;
-      const hw = userDir !== 0 ? 5 : 7;
-      sa(E.velP, { d: `M${x} ${yz} L${x} ${yz + dir * len} M${x - hw} ${yz + dir * (len - hw - 1)} L${x} ${yz + dir * len} L${x + hw} ${yz + dir * (len - hw - 1)}`,
-        'stroke-width': userDir !== 0 ? 1.75 : 2.5, 'stroke-dasharray': userDir !== 0 ? 'none' : '5 3', stroke: userDir !== 0 ? '#6F7A84' : '#4E5D6A' });
-      sa(E.velT, { x: x - 7, y: yz + dir * len / 2 + 5, fill: userDir !== 0 ? '#6F7A84' : '#4E5D6A' });
-      sa(E.vel, { opacity: 1 });
-    } else sa(E.vel, { opacity: 0 });
     // 좁은 화면 겹침 정리: 공기 덩어리·화살표 둘레의 글자는 비켜 두거나 잠시 숨김 (같은 값은 현재 수치·그래프에 있음)
     const near = [{ x: E.px - rad - 9, y: yz - rad - 9, width: 2 * rad + 18, height: 2 * rad + 18 }];
-    [E.buoy, E.vel].forEach(el => { if (shown(el)) { const bb = bbox(el); if (bb) near.push(bb); } });
+    if (shown(E.buoy)) { const bb = bbox(E.buoy); if (bb) near.push(bb); }
     E.envLbls.forEach(t => { const bb = bbox(t); sa(t, { opacity: bb && near.some(n => overlap(bb, n)) ? 0 : 1 }); });
     // 공기 덩어리 기온 글자와 이어 읽히지 않게 좌우로 여유를 두고 피함
     const markBoxes = E.markEls.filter(m => shown(m.g)).map(m => bbox(m.t)).filter(Boolean).map(bb => ({ x: bb.x - 14, y: bb.y + 3, width: bb.width + 28, height: bb.height - 6 }));
-    if (typ) { const ty = +E.typT.getAttribute('y'); dodge(E.typT, typ === 'cumulus' ? [ty, ty - 18, ty + 18] : [ty, ty - 18, yH + 44, yH + 62], near.concat(markBoxes, [bbox(E.sNowTag)])); }
+    if (typ) { const ty = +E.typT.getAttribute('y'); dodge(E.typT, typ === 'cumulus' ? [ty, ty - 18, ty + 18] : [ty, ty - 18, yH + 44, yH + 62], near.concat(markBoxes)); }
     if (Hn <= ZMAX) dodge(E.sLCLt, [yH - 7, yH + 18, yH + 32], (shown(E.typT) ? near.concat([bbox(E.typT)]) : near).concat(markBoxes));
     else sa(E.sLCLt, { opacity: 0 });
-    placeStatus(f, fr, yz, rad);
 
     /* 그래프 */
     sa(E.gLCL, { y1: yH, y2: yH, opacity: Hn <= ZMAX ? 1 : 0 });
     sa(E.gLCLt, { y: yH - 7 }); E.gLCLt.textContent = `상승 응결 고도 ${fZ(Hn)} km`;
     clear(E.gCross);
     sa(E.shade, { opacity: showAll ? 1 : 0 });
-    if (showAll) {
+    {                                                   // 자유 대류 고도: 늘 표시 (조건부 불안정 · 역전층)
       iv.warm.forEach(([a, c], i) => {
         if (a > 1e-6 && a < ZMAX) {
           s('line', { x1: ax.X0, x2: ax.X1, y1: f.yOf(a), y2: f.yOf(a), stroke: 'var(--lfc)', 'stroke-width': 2.2, 'stroke-dasharray': '3 4 10 4' }, E.gCross);
@@ -620,9 +589,7 @@ const CloudLab = (function () {
     sa(E.ghost, { d: showAll ? pathD(full, ax, f) : '' });
     const hm = zMaxH;
     const tp = hm > Hn ? [[st.T0, 0], [tH, Hn], [Physics.parcel(st.T0, st.Td0, hm).T, hm]] : [[st.T0, 0], [Physics.parcel(st.T0, st.Td0, hm).T, hm]];
-    const dp = hm > Hn ? [[st.Td0, 0], [tH, Hn], [Physics.parcel(st.T0, st.Td0, hm).T, hm]] : [[st.Td0, 0], [st.Td0 - 2 * hm, hm]];
     sa(E.Tp, { d: hm > 0.005 ? pathD(tp, ax, f) : '' });
-    sa(E.Dp, { d: hm > 0.005 ? pathD(dp, ax, f) : '' });
     const nz = Math.min(0.35, hm);
     sa(E.TpT, { x: ax.gx(Physics.parcel(st.T0, st.Td0, nz).T) - 10, y: f.yOf(nz) + 4, opacity: hm > 0.6 && Math.abs(z - nz) > 0.4 ? 1 : 0 });
     sa(E.gNow, { y1: yz, y2: yz });
@@ -634,8 +601,6 @@ const CloudLab = (function () {
     const ly = clamp(yz - 12, ax.Y1 + 14, ax.Y0 - 8);
     sa(E.lblP, { x: xP + (left ? -12 : 12), y: ly, 'text-anchor': left ? 'end' : 'start' }); E.lblP.textContent = `${sP} ℃`;
     sa(E.lblE, { x: xE + (left ? 12 : -12), y: ly, 'text-anchor': left ? 'start' : 'end' }); E.lblE.textContent = `${sE} ℃`;
-    sa(E.lblD, { x: (xP + xE) / 2, y: clamp(yz + 22, ax.Y1 + 14, ax.Y0 - 6), opacity: Math.abs(xP - xE) > 46 ? 1 : 0 });
-    E.lblD.textContent = same ? '같음' : `${signed(b, Math.max(1, fPair(par.T, env)[2]))} ℃`;
     if (st.cmp) {
       const c = st.cmp, Pc = Physics.makeProfile(c.T0, c.gamma, c.inv.on ? c.inv : null);
       sa(E.cmpPt, { x: ax.gx(Physics.envTemp(Pc, z)) - 5, y: yz - 5, opacity: 0.6 });
@@ -648,11 +613,13 @@ const CloudLab = (function () {
     ui.ro.set('z', `${fZ(z)}<small>km</small>`, `응결 고도 ${fZ(Hn)} km`);
     let cmpSub = '';
     if (st.cmp) { const c = st.cmp, Pc = Physics.makeProfile(c.T0, c.gamma, c.inv.on ? c.inv : null); cmpSub = `비교 ${fT(Physics.envTemp(Pc, z))} ℃`; }
-    ui.ro.set('Tp', `${sP}<small>℃</small>`, par.saturated ? '포화 (응결 고도 위)' : '불포화');
-    ui.ro.set('Te', `${sE}<small>℃</small>`, cmpSub || `이 높이 감률 ${fmt(Physics.envLapse(P, z), 1)} ℃/km`);
-    ui.ro.set('d', `${same ? '0.0' : signed(b, Math.max(1, fPair(par.T, env)[2]))}<small>℃</small>`, same ? '부력 없음' : (b > 0 ? '위로 부력 ↑' : '아래로 부력 ↓'));
-    const mv = motionText(fr, b);
-    ui.ro.set('m', `<span style="font-size:21px">${mv.short}</span>`, mv.sub);
+    const tiny = Math.abs(b) < 0.05;
+    ui.ro.set('Tp', `${sP}<small>℃</small>`, tiny ? '주위와 같다' : (b < 0 ? '주위보다 낮다 ↓' : '주위보다 높다 ↑'));
+    ui.ro.set('Te', `${sE}<small>℃</small>`, cmpSub || `감률 ${fmt(Physics.envLapse(P, z), 1)} ℃/km`);
+    const ct = cloudType();
+    ui.ro.set('cloud', `<span style="font-size:21px">${ct === 'cumulus' ? '적운형' : (ct === 'stratus' ? '층운형' : '없음')}</span>`,
+      ct === 'cumulus' ? (r.stratForced ? '층운형 위로 발달' : '위로 두껍게 발달') : (ct === 'stratus' ? '얇게 옆으로 퍼짐' : (par.saturated ? '포화' : '응결 고도 아래')));
+    void same;
     renderGuide(fr, b, par, iv);
     renderBadge(iv);
     renderCases();
@@ -670,49 +637,7 @@ const CloudLab = (function () {
     }
     sa(el, { y: ys[0], opacity: 0 });
   }
-  /** 공기 덩어리 아래 상태 문구: 수치·화살표·주위 기온 글자와 겹치지 않는 자리를 고른다 */
-  function placeStatus(f, fr, yz, rad) {
-    const t = E.status;
-    let text = '';
-    if ((fr.phase === 'lift' || fr.phase === 'drag') && fr.dir !== 0) text = fr.dir > 0 ? '올리는 중' : '내리는 중';
-    else if (fr.phase === 'hold' || fr.phase === 'drag') text = '이 높이에 붙잡아 둔 상태';
-    if (t.textContent !== text) t.textContent = text;
-    if (!text) { sa(t, { opacity: 0 }); return; }
-    sa(t, { x: 0, y: 0 });
-    const b0 = bbox(t) || { x: -text.length * 7, y: -14, width: text.length * 14, height: 18 };     // 글자 상자 (원점 기준)
-    const PAD = 3, GAP = 11;                                          // 글자 여백 · 공기 덩어리 테두리와의 간격
-    const boxes = [{ x: E.px - rad - GAP, y: yz - rad - GAP, width: 2 * (rad + GAP), height: 2 * (rad + GAP) }];
-    const add = el => { if (shown(el)) { const b = bbox(el); if (b) boxes.push(b); } };
-    add(E.buoy); add(E.vel); add(E.sNowTag); add(E.sLCLt); add(E.typT); E.envLbls.forEach(add); E.markEls.forEach(m => add(m.g));
-    const yGround = f.yOf(0), Hn = H();
-    const line = Hn <= ZMAX ? [{ x: 0, y: f.yOf(Hn) - 2, width: f.sceneW, height: 4 }] : [];   // 상승 응결 고도 선 (되도록 피함)
-    const rectAt = (cx, by) => ({ x: cx + b0.x - PAD, y: by + b0.y - PAD, width: b0.width + 2 * PAD, height: b0.height + 2 * PAD });
-    const fits = (cx, by, strict) => {
-      const r = rectAt(cx, by);
-      if (r.x < 2 || r.x + r.width > f.sceneW - 2 || r.y < 2 || r.y + r.height > yGround - 2) return false;
-      return !boxes.some(b => overlap(r, b)) && !(strict && line.some(b => overlap(r, b)));
-    };
-    const below = yz + rad + GAP + PAD - b0.y, above = yz - rad - GAP - PAD - b0.y - b0.height;
-    const ys = [];
-    for (let k = 0; k < 6; k++) ys.push(below + k * 10);              // 공기 덩어리 아래부터
-    for (let k = 0; k < 5; k++) ys.push(above - k * 10);              // 아래에 자리가 없으면 위
-    const half = b0.width / 2 + PAD + 2;
-    const xs = [E.px, E.px - half + rad, E.px + half - rad].map(x => clamp(x, half, f.sceneW - half));
-    let pos = null;
-    for (const strict of [true, false]) {
-      for (const by of ys) { for (const cx of xs) if (fits(cx, by, strict)) { pos = [cx, by]; break; } if (pos) break; }
-      if (pos) break;
-    }
-    if (!pos) pos = [xs[0], below + b0.height + 2 * PAD + 2 * GAP + 2 * rad > yGround ? above : below];
-    sa(t, { x: pos[0].toFixed(1), y: pos[1].toFixed(1), opacity: 1 });
-  }
-  function motionText(fr, b) {
-    if ((fr.phase === 'lift' || fr.phase === 'drag') && fr.dir !== 0) return { short: fr.dir > 0 ? '강제 상승' : '강제 하강', sub: fr.dir > 0 ? '직접 올리는 중' : '직접 내리는 중' };
-    if (fr.phase === 'hold' || fr.phase === 'drag') return { short: '붙잡아 둠', sub: fr.note === 'top' ? `표시 상한 ${ZMAX} km` : '이 높이에서 관찰 중' };
-    if (fr.note === 'top') return { short: '표시 상한', sub: `${ZMAX} km에서 멈춤` };
-    if (Math.abs(fr.v) < 0.01) return { short: '정지', sub: fr.note === 'ground' ? '지표' : (Math.abs(b) < 0.05 ? '주위와 같은 기온' : '') };
-    return { short: fr.v > 0 ? '상승 중' : '하강 중', sub: (fr.v > 0) === (b > 0) ? '부력과 같은 방향' : '부력과 반대 → 느려짐' };
-  }
+
   function renderGuide(fr, b, par, iv) {
     if (st.notice) { ui.ro.guide('안내', 'neutral', st.notice); return; }
     const vsTxt = `공기 ${fT(par.T)} ℃ · 주위 ${fT(par.T - b)} ℃`;
@@ -755,6 +680,9 @@ const CloudLab = (function () {
     const html = st.inv.on ? `${T.split(' (')[0]} + 역전층` : T;
     if (ui.badge.textContent !== stripTags(html)) ui.badge.innerHTML = html;
     ui.badge.className = 'stab-badge ' + c.key;
+    ui.badge.hidden = !st.inv.on && CASE_BTNS.some(x => Math.abs(x.g - st.gamma) < 1e-9);   // 위쪽 버튼으로 이미 보이면 숨김
+    ui.preset.set();
+    ui.condInfo.textContent = `지표 공기 ${fT(st.T0)} ℃ · 이슬점 ${fT(st.Td0)} ℃ → 상승 응결 고도 ${fZ(H())} km`;
     const P = prof();
     if (st.inv.on) {
       const top = st.inv.base + st.inv.depth;
@@ -817,19 +745,14 @@ const CloudLab = (function () {
     });
   }
   function renderControls() {
-    if (!ui.ctrl || !st.run) return;
+    if (!ui.rel || !st.run) return;
     const r = st.run, fr = cur();
-    const mv = active();
-    ui.ctrl.setPlay(!st.paused && mv, mv ? '▶ 재생' : '▶ 공기 올리기');
-    const keys = [...new Set(r.keys.concat([r.frames.length - 1]))];
-    ui.ctrl.setStep(keys.some(k => k < st.idx), keys.some(k => k > st.idx));
     ui.rel.disabled = fr.phase === 'free';          // 이미 자유롭게 움직이는 중에는 놓기 끔
-    ui.relHint.classList.toggle('show', fr.phase !== 'free');
     ui.lift.innerHTML = st.target < fr.z - 1e-9 ? '공기 내리기' : '공기 올리기';
-    ui.lift.disabled = Math.abs(st.target - fr.z) < 1e-9 && fr.phase !== 'free';
-    ui.tl.max = Math.max(0, r.frames.length - 1);
-    if (document.activeElement !== ui.tl) ui.tl.value = st.idx;
-    ui.tl.style.setProperty('--fill', (r.frames.length > 1 ? st.idx / (r.frames.length - 1) * 100 : 0) + '%');
+    const hint = fr.phase === 'lift' || fr.phase === 'drag' ? ''
+      : fr.phase === 'hold' ? '놓으면 공기 덩어리가 어떻게 움직일까요? 구름은 어떻게 될까요?'
+      : (!r.settled ? '' : (r.frames.length <= 1 ? '「꾹 눌러 올리기」를 누르고 있거나 공기 덩어리를 끌어 올려 보세요.' : '다시 하려면 「↺ 처음으로」를 누르세요.'));
+    if (ui.relHint.textContent !== hint) ui.relHint.textContent = hint;
   }
 
   return {

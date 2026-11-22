@@ -177,6 +177,17 @@ svg text { font-family: var(--font); }
 .presets { display: inline-flex; gap: 4px; margin-left: 4px; }
 .presets .btn { min-width: 44px; min-height: 44px; padding: 0 8px; }
 .presets .btn.on { background: var(--tab-on); border-color: #9CCFC6; color: var(--tab-on-ink); }
+.presets.big .btn { min-width: 52px; min-height: 44px; font-size: 17px; }
+.case-btns { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.case-btns .btn { min-height: 46px; padding: 0 14px; font-size: 16px; flex-direction: column; gap: 0; line-height: 1.15; }
+.case-btns .btn small { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.case-btns .btn.on { background: var(--tab-on); border-color: #9CCFC6; color: var(--tab-on-ink); }
+.case-btns .btn.on small { color: var(--tab-on-ink); }
+.cond-info { font-size: 14.5px; font-weight: 600; color: var(--ink-2); }
+/* 3·4탭: 간단한 조작 줄 (한 줄에 꼭 필요한 버튼만) */
+.ctrl-bar.act-bar { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 7px 10px; }
+.act-bar .btn { min-height: 48px; font-size: 17px; padding: 0 20px; }
+.act-bar .rel-hint { flex: 1 1 240px; max-width: none; font-size: 15px; }
 
 /* 3. 대기 안정도: 지금 공기의 판정 배지 · 포화 여부 · 정리 표 · A·B·C 구간 */
 .stab-badge.st-stable { background: #E1ECF5; color: #1F5A88; }
