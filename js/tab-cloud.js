@@ -338,13 +338,13 @@ const CloudLab = (function () {
       {
         id: 'lfc', title: '저절로 올라가기 시작하는 높이 찾기',
         goal: '<b>조건부 불안정</b> 대기에서 공기 덩어리를 <b>되도록 낮은 곳</b>에서 놓아, 강제로 올리는 힘 없이 <b>저절로 올라가</b> 적운형 구름이 생기게 하세요. (그 높이보다 0.3 km 이내에서 놓기)',
-        hints: ['응결 고도 위에서 공기 덩어리 기온과 주위 기온을 높이마다 비교해 보세요.', '공기 덩어리가 주위보다 따뜻해지기 시작하는 높이를 자유 대류 고도라고 해요.', '그래프에 표시된 자유 대류 고도 바로 위까지 올렸다 놓아 보세요.'],
+        hints: ['응결 고도 위에서 공기 덩어리 기온과 주위 기온을 높이마다 비교해 보세요.', '공기 덩어리가 주위보다 따뜻해지기 시작하는 높이를 찾아보세요. 그 높이부터는 놓아도 저절로 올라가요.', '그래프에 표시된 「주위보다 따뜻해지는 높이」 바로 위까지 올렸다 놓아 보세요.'],
         check(lab, since) {
           const rel = lab.since(since, 'release').filter(e => e.cls === 'conditional' && !e.inv && e.lfc != null && e.z >= e.lfc - 1e-9 && e.z <= e.lfc + 0.3);
           if (!rel.length) return false;
           return lab.since(rel[0].seq, 'cloud').some(e => e.kind === 'cumulus');
         },
-        success: '자유 대류 고도보다 위에서는 강제로 올리는 힘이 없어도 공기가 저절로 올라가 적운형 구름이 발달해요.'
+        success: '공기 덩어리가 주위보다 따뜻해지는 높이보다 위에서는 강제로 올리는 힘이 없어도 저절로 올라가 적운형 구름이 발달해요.'
       }
     ]);
   }
@@ -572,12 +572,12 @@ const CloudLab = (function () {
     sa(E.gLCLt, { y: yH - 7 }); E.gLCLt.textContent = `상승 응결 고도 ${fZ(Hn)} km`;
     clear(E.gCross);
     sa(E.shade, { opacity: showAll ? 1 : 0 });
-    {                                                   // 자유 대류 고도: 늘 표시 (조건부 불안정 · 역전층)
+    {                                                   // 공기 덩어리가 주위보다 따뜻해지는 높이: 늘 표시 (조건부 불안정 · 역전층)
       iv.warm.forEach(([a, c], i) => {
         if (a > 1e-6 && a < ZMAX) {
           s('line', { x1: ax.X0, x2: ax.X1, y1: f.yOf(a), y2: f.yOf(a), stroke: 'var(--lfc)', 'stroke-width': 2.2, 'stroke-dasharray': '3 4 10 4' }, E.gCross);
           const near = Math.abs(f.yOf(a) - yH) < 18;
-          txt({ x: ax.X1 - 6, y: f.yOf(a) + (near ? 18 : -7), 'text-anchor': 'end', class: 'lb-sm halo', fill: 'var(--lfc)' }, `${i === 0 ? '자유 대류 고도' : '다시 따뜻해짐'} ${fApprox(a)} km`, E.gCross);
+          txt({ x: ax.X1 - 6, y: f.yOf(a) + (near ? 18 : -7), 'text-anchor': 'end', class: 'lb-sm halo', fill: 'var(--lfc)' }, `${i === 0 ? '주위보다 따뜻해지는 높이' : '다시 따뜻해짐'} ${fApprox(a)} km`, E.gCross);
         }
         if (c < ZMAX - 1e-6) {
           s('line', { x1: ax.X0, x2: ax.X1, y1: f.yOf(c), y2: f.yOf(c), stroke: 'var(--lfc)', 'stroke-width': 1.5, 'stroke-dasharray': '2 4', opacity: 0.8 }, E.gCross);
@@ -610,7 +610,7 @@ const CloudLab = (function () {
     clear(E.edge);
     edgeMarker(E.edge, ax, f, par.T, z, 'var(--temp)');
     edgeMarker(E.edge, ax, f, env, z, 'var(--env)');
-    untangle(sh.graphSvg, [E.lblP, E.lblE], ax);   // 값 글자가 다른 글자와 겹치지 않게
+    untangle(sh.graphSvg, [...E.gCross.querySelectorAll('text'), E.lblP, E.lblE], ax);   // 「주위보다 따뜻해지는 높이」 · 값 글자가 다른 글자와 겹치지 않게
 
     /* 수치 */
     ui.ro.set('z', `${fZ(z)}<small>km</small>`, `응결 고도 ${fZ(Hn)} km`);
@@ -712,8 +712,8 @@ const CloudLab = (function () {
       lines: () => [
         `지표면의 공기 덩어리를 강제로 상승시키면 ${blank('cond', '건조 단열 감률')}에 따라 온도가 낮아지다가, ${blank('cond', '상승 응결 고도')}에서 포화 상태가 된다. 이때 층운형 구름이 생성된다.`,
         `공기 덩어리가 계속 상승해 온도가 주위 기온보다 높아지면, 강제로 상승시키는 힘이 없어도 ${blank('cond', '저절로')} 상승한다. 이때 적운형 구름이 생성된다.`],
-      exps: [{ t: '2.50 km까지 올리기', z: 2.5, d: '응결 고도 위 · 놓으면?' }, { t: '3.50 km까지 올리기', z: 3.5, d: '자유 대류 고도 위 · 놓으면?', keep: true }],
-      note: '<b>자유 대류 고도</b>: 올라가던 공기 덩어리가 주위보다 따뜻해지기 시작하는 높이(이 조건에서 약 3.33 km). 이 위에서는 놓아도 저절로 올라가요.' }
+      exps: [{ t: '2.50 km까지 올리기', z: 2.5, d: '응결 고도 위 · 놓으면?' }, { t: '3.50 km까지 올리기', z: 3.5, d: '주위보다 따뜻해지는 높이(약 3.33 km) 위 · 놓으면?', keep: true }],
+      note: '이 조건에서는 약 <b>3.33 km</b>보다 높이 올라가면 공기 덩어리가 주위보다 따뜻해져, 놓아도 <b>저절로</b> 올라가요.' }
   ];
   /** 카드의 실험 버튼: 기본 지표 공기(30 ℃ · 14 ℃, 역전층 없음)와 그 감률로 맞추고 올리기 */
   function runCase(c, e) {

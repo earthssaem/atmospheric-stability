@@ -265,13 +265,12 @@ const StabLab = (function () {
       { value: true, label: '포화 <small>5 ℃/km</small>', title: '포화 공기: 습윤 단열 감률(5 ℃/km)로 기온이 변해요' }
     ], st.sat, v => setCond({ sat: v }), { label: '공기 덩어리 상태', cls: 'sat-seg' });
     const satField = h('div', { class: 'nf' }, h('span', { class: 'nf-label', text: '공기 덩어리' }), ui.sat.el);
-    sh.cond.append(h('div', { class: 'cond-group' }, gField, satField));
+    ui.verdict = h('div', { class: 'verdict', role: 'status', 'aria-live': 'polite' });   // 이 대기의 안정도 판정 (이 탭의 핵심이라 크게)
+    sh.cond.append(h('div', { class: 'cond-group' }, gField, satField), ui.verdict);
     ui.g = NumField({ label: '주위 기온 감률 γ', min: 2, max: 14, step: 0.1, sliderStep: 0.5, decimals: 1, value: st.gamma, unit: '℃/km', cls: 'tight', onCommit: v => setCond({ gamma: v }) });
     ui.g.range.style.setProperty('--c', 'var(--env)');
     ui.dz = NumField({ label: '움직일 거리', min: 0.25, max: 2, step: 0.05, decimals: 2, value: st.dz, unit: 'km', cls: 'compact', onCommit: v => { st.dz = v; render(); } });
 
-    ui.zoneBadge = h('span', { class: 'stab-badge' });
-    sh.sceneHead.append(ui.zoneBadge);
     ui.legend = h('span', { class: 'legend' });
     sh.graphLegend.append(ui.legend);
 
@@ -417,21 +416,23 @@ const StabLab = (function () {
     E.zones = s('g', null, ax.bg);
     const lo = XR.min - 200, hi = XR.max + 200, zt = ZVIEW + 2;
     const dryT = z => TZ0 - Physics.DRY * (z - Z0), moistT = z => TZ0 - Physics.MOIST * (z - Z0);
-    const poly = (pts, fill) => s('path', { d: pathD(pts, ax, f) + ' Z', fill, opacity: 0.6 }, E.zones);
+    const zk = zone(), curK = ZONE[zk].k;
+    const poly = (pts, fill, k) => s('path', { d: pathD(pts, ax, f) + ' Z', fill, opacity: !curK ? 0.6 : (k === curK ? 0.95 : 0.35) }, E.zones);   // 지금 구간을 진하게
     const O = [TZ0, Z0];
-    poly([O, [dryT(zt), zt], [lo, zt], [lo, Z0]], '#F8DCC8');               // B 절대 불안정
-    poly([O, [dryT(zt), zt], [moistT(zt), zt]], '#EEF2E2');                 // C 조건부 불안정
-    poly([O, [moistT(zt), zt], [hi, zt], [hi, Z0]], '#D9E8F5');             // A 절대 안정
+    poly([O, [dryT(zt), zt], [lo, zt], [lo, Z0]], '#F8DCC8', 'B');               // B 절대 불안정
+    poly([O, [dryT(zt), zt], [moistT(zt), zt]], '#E4EFD6', 'C');                 // C 조건부 불안정
+    poly([O, [moistT(zt), zt], [hi, zt], [hi, Z0]], '#D9E8F5', 'A');             // A 절대 안정
+    const zcls = k => (k === curK ? 'lb halo zone-cur' : 'lb-sm halo zone-dim');
     E.zoneLbl = s('g', null, o);
     const zl = ZVIEW - 0.22;
-    txt({ x: ax.X1 - 8, y: f.yOf(zl), 'text-anchor': 'end', class: 'lb-sm halo', fill: '#1F5A88' }, 'A 절대 안정', E.zoneLbl);
+    txt({ x: ax.X1 - 8, y: f.yOf(zl), 'text-anchor': 'end', class: zcls('A'), fill: '#1F5A88' }, 'A 절대 안정', E.zoneLbl);
     // C 구간 이름: 기온선이 C 구간을 지나면 더 넓은 쪽 틈에, 좁으면 글자 하나만
     { const xd = ax.gx(dryT(zl)), xm = ax.gx(moistT(zl)), xe = ax.gx(at(zl).Te);
       let a = xd, c = xm;
       if (xe > xd + 1 && xe < xm - 1) { if (xe - xd > xm - xe) c = xe; else a = xe; }
       const w = c - a, full = w > 128;
-      if (w > 22) txt({ x: (a + c) / 2, y: f.yOf(zl), 'text-anchor': 'middle', class: 'lb-sm halo', fill: '#4E6A2A' }, full ? 'C 조건부 불안정' : 'C', E.zoneLbl); }
-    txt({ x: ax.X0 + 8, y: f.yOf(Z0 + 0.3), class: 'lb-sm halo', fill: '#9C4A1E' }, 'B 절대 불안정', E.zoneLbl);
+      if (w > 22) txt({ x: (a + c) / 2, y: f.yOf(zl), 'text-anchor': 'middle', class: zcls('C'), fill: '#3F6A22' }, full ? 'C 조건부 불안정' : 'C', E.zoneLbl); }
+    txt({ x: ax.X0 + 8, y: f.yOf(Z0 + 0.3), class: zcls('B'), fill: '#9C4A1E' }, 'B 절대 불안정', E.zoneLbl);
     E.cmpG = s('g', { opacity: 0.4 }, p);
     s('line', { x1: ax.X0, x2: ax.X1, y1: f.yOf(Z0), y2: f.yOf(Z0), stroke: C_ORIGIN, 'stroke-width': 1.5, 'stroke-dasharray': '9 6', opacity: 0.8 }, p);
     // 건조 · 습윤 단열선 (원래 위치의 점을 지남): 지금 공기 덩어리 상태의 선을 진하게
@@ -592,10 +593,23 @@ const StabLab = (function () {
       ui.ro.guide('정지', 'neutral', vs);
     }
   }
+  /** 판정 카드: 기온 감률로 정해지는 대기 안정도(A · B · C)와, 불포화 · 포화 공기 각각의 결과 (지금 공기 상태를 강조) */
   function renderBadge() {
-    const zk = zone();
-    if (ui.zoneBadge.textContent !== ZONE[zk].t) ui.zoneBadge.textContent = ZONE[zk].t;
-    ui.zoneBadge.className = 'stab-badge ' + zk;
+    const zk = zone(), g = fmt(st.gamma, 1);
+    const V = {
+      'absolute-stable': { k: 'A', t: '절대 안정', rel: `기온 감률 ${g} < 습윤 단열 감률 5`, u: '안정', s: '안정' },
+      'moist-neutral': { k: '', t: '경계값', rel: `기온 감률 ${g} = 습윤 단열 감률 5`, u: '안정', s: '중립' },
+      'conditional': { k: 'C', t: '조건부 불안정', rel: `습윤 5 < 기온 감률 ${g} < 건조 10`, u: '안정', s: '불안정' },
+      'dry-neutral': { k: '', t: '경계값', rel: `기온 감률 ${g} = 건조 단열 감률 10`, u: '중립', s: '불안정' },
+      'absolute-unstable': { k: 'B', t: '절대 불안정', rel: `기온 감률 ${g} > 건조 단열 감률 10`, u: '불안정', s: '불안정' }
+    }[zk];
+    const key = [zk, g, st.sat].join('|');
+    if (ui.verdict.dataset.key === key) return;
+    ui.verdict.dataset.key = key;
+    ui.verdict.className = 'verdict ' + zk;
+    const pill = (lab, v, on) => `<span class="vd-s${on ? ' on' : ''}">${lab} 공기 → <b>${v}</b></span>`;
+    ui.verdict.innerHTML = `<div class="vd-main">${V.k ? `<span class="vd-k">${V.k}</span>` : ''}<span class="vd-t">${V.t}</span></div>
+      <div class="vd-sub"><div class="vd-rel">${V.rel.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div><div class="vd-pills">${pill('불포화', V.u, !st.sat)}${pill('포화', V.s, st.sat)}</div></div>`;
   }
   function renderControls() {
     if (!ui.rel || !st.run) return;

@@ -143,8 +143,8 @@ const ok = (c, label, detail) => { if (c) { pass++; console.log('  ✓ ' + label
     z = await ev(`${S}.cur().z`);
     r = await ro('stab');
     ok(z > 3.9 && /멀어졌어요/.test(r.guide), '포화 공기는 멀어짐 → 불안정 (조건부 불안정)', { z, g: r.guide });
-    const badge = await ev(() => [...document.querySelectorAll('#lab-stab .stab-badge')].map(x => x.textContent).join(' | '));
-    ok(/C 조건부 불안정/.test(badge), '배지: C 조건부 불안정', badge);
+    const badge = await ev(() => [document.querySelector('#lab-stab .verdict').textContent, (document.querySelector('#lab-stab .verdict .vd-s.on') || {}).textContent]);
+    ok(/C\s*조건부 불안정/.test(badge[0]) && /포화 공기 → 불안정/.test(badge[1]), '판정 카드: C 조건부 불안정 · 지금 포화 공기 → 불안정 강조', badge);
     // 중립: γ 10 · 불포화 → 놓은 자리에 머묾
     await ev(`${S}.setCond({ gamma: 10, sat: false })`); await ev(`${S}.force(-1)`); await page.waitForTimeout(2200);
     await ev(`${S}.release()`); await page.waitForTimeout(1500);
@@ -205,7 +205,7 @@ const ok = (c, label, detail) => { if (c) { pass++; console.log('  ✓ ' + label
     await ev(`App.TABS.cloud.api.seek(0)`); await ev(`App.TABS.cloud.api.seek(${idxMid})`); const b = await ro('cloud');
     ok(JSON.stringify(a) === JSON.stringify(b), '기록 되감기: 같은 순간은 같은 수치', { a: a[0], b: b[0] });
     const lbl = await ev(() => [...document.querySelectorAll('#lab-cloud .graph-pane svg text')].map(t => t.textContent).join('|'));
-    ok(/자유 대류 고도 약 3\.33 km/.test(lbl), '자유 대류 고도 약 3.33 km 표시', lbl.slice(0, 200));
+    ok(/주위보다 따뜻해지는 높이 약 3\.33 km/.test(lbl) && !/자유 대류/.test(lbl), '그래프에 「주위보다 따뜻해지는 높이 약 3.33 km」 표시 (자유 대류 고도라는 말 없이)', lbl.slice(0, 200));
     const badge = async g => { await ev(`App.TABS.cloud.api.setCond({gamma: ${g}})`); return ev(() => document.querySelector('#lab-cloud .stab-badge').textContent); };
     ok(/불포화 안정 · 포화 중립/.test(await badge(5)), 'γ = 5: 불포화 안정 · 포화 중립');
     ok(/불포화 중립 · 포화 불안정/.test(await badge(10)), 'γ = 10: 불포화 중립 · 포화 불안정');
