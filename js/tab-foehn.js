@@ -91,13 +91,6 @@ const FoehnLab = (function () {
 
   function buildMore() {
     const m = sh.more;
-    ui.table = h('div');
-    m.appendChild(Fold('단계별 표 — 출발 · 응결 시작 · 정상 · 도착', ui.table, false));
-    m.appendChild(Fold('푄 현상의 원리', h('div', { html: `
-      <ul><li><b>풍상측</b>: 응결 고도까지 기온 −10, 이슬점 −2 ℃/km → 그 위는 둘 다 −5 ℃/km. 구름이 생기고 <b>비로 수분을 잃어요</b>.</li>
-      <li><b>풍하측</b>: 내려오며 기온 +10, 이슬점 +2 ℃/km.</li>
-      <li>그래서 도착한 공기는 출발 때보다 <b>더 따뜻하고 건조해요</b>. 우리나라 예: 늦봄~초여름 영서 지방의 <b>높새바람</b></li></ul>
-      <p class="note">응결한 물은 모두 비로 떨어진다고 본 교과서 모형 · 그림 Ⅲ-13</p>` }), false));
     // 더 해 보기: 실험 2개 + 도전 1개
     const exps = [
       { t: '산 높이가 다르면 도착 기온은?', d: '같은 공기(20 ℃·12 ℃) · 산 2 km와 3 km', run: () => setupExperiment({ T0: 20, Td0: 12, M: 2 }, { T0: 20, Td0: 12, M: 3 }, '산 2 km 결과를 비교용으로 남겼어요. 산 3 km를 넘겨 도착 기온을 비교해 보세요.') },
@@ -555,7 +548,6 @@ const FoehnLab = (function () {
     ui.ro.set('Td', `${sD}<small>℃</small>`, cmpD);
     ui.ro.set('rh', `${fmt(rh, 0)}<small>%</small>`, st.s >= 1 - 1e-9 ? `출발 ${fmt(Physics.relHumidity(fo.start.T, fo.start.Td), 0)} %` : (cur.saturated ? '포화' : '불포화'));
     renderGuide(fo, cur, pos, stg);
-    renderTable(fo, stg);
     if (ch) ch.check();
   }
   function atStage(fo) {
@@ -582,17 +574,6 @@ const FoehnLab = (function () {
     } else if (pos.seg === 'flatDown') msg = '풍하측 평지로 이동하는 중이에요.';
     else msg = '내려가며 기온은 <b>10 ℃/km</b>, 이슬점은 <b>2 ℃/km</b>씩 높아져요. 기온이 더 빨리 올라 <b>상대 습도가 낮아져요</b>.';
     ui.ro.guide(state, cls, msg);
-  }
-  function renderTable(fo, stg) {
-    const rows = [['start', fo.start], ['lcl', fo.lclPoint], ['summit', fo.summit], ['arrive', fo.arrival]];
-    let html = '<table class="stage-table"><thead><tr><th>단계</th><th>높이</th><th>기온</th><th>이슬점</th><th>상대 습도</th></tr></thead><tbody>';
-    rows.forEach(([k, p]) => {
-      if (!p) { html += `<tr><td>${stageHtml(k)}</td><td colspan="4" style="text-align:left;color:var(--muted)">정상까지 응결하지 않음</td></tr>`; return; }
-      html += `<tr class="${stg === k ? 'cur' : ''}"><td>${stageHtml(k)}</td><td>${fZ(p.z)} km</td><td class="t">${fT(p.T)} ℃</td><td class="d">${fT(p.Td)} ℃</td><td>${fmt(Physics.relHumidity(p.T, p.Td), 0)} %</td></tr>`;
-    });
-    html += '</tbody></table>';
-    html += `<p class="note">출발 → 도착: 기온 ${signed(fo.dT)} ℃, 이슬점 ${signed(fo.dTd)} ℃</p>`;
-    if (ui.table.innerHTML !== html) ui.table.innerHTML = html;
   }
   function renderControls() {
     if (!ui.ctrl) return;

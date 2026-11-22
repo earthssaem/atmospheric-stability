@@ -21,8 +21,7 @@ const CloudLab = (function () {
     T0: DEF.T0, Td0: DEF.Td0, gamma: DEF.gamma,
     inv: { on: false, base: INV_EX.base, depth: INV_EX.depth, dT: INV_EX.dT },
     target: 2, paused: false, showPath: false, cmp: null, notice: '',
-    run: null, idx: 0, acc: 0, holdBtn: false,
-    seen: {}, reveal: false     // 관찰한 구름: stable(층운형) · unstable(적운형) · cond(층운형 → 적운형)
+    run: null, idx: 0, acc: 0, holdBtn: false
   };
   L.st = st;
   let sh, ui = {}, E = {}, ax = null, ch = null;
@@ -64,14 +63,9 @@ const CloudLab = (function () {
     if (r.firstStrat < 0 && fr.z >= Hn - 1e-9 && fr.z > 1e-6) { r.firstStrat = i; r.stratForced = fr.phase !== 'free'; noteCloud('stratus'); }
     if (r.firstCum < 0 && fr.phase === 'free' && fr.z > Hn + 0.3 && fr.v > 0.05 && fr.b > 0) { r.firstCum = i; noteCloud('cumulus'); }
   }
-  /** 구름이 생긴 순간: 세 가지 대기 카드의 빈칸 채우기 · 도전 판정용 기록 */
+  /** 구름이 생긴 순간: 도전 판정용 기록 */
   function noteCloud(kind) {
-    const k = Physics.stabilityClass(st.gamma).key, r = st.run;
-    L.emit('cloud', { kind, cls: k, inv: st.inv.on, key: condKey() });
-    if (st.inv.on) return;
-    if (kind === 'stratus' && k === 'absolute-stable') st.seen.stable = true;
-    if (kind === 'cumulus' && k === 'absolute-unstable') st.seen.unstable = true;
-    if (kind === 'cumulus' && k === 'conditional' && r.firstStrat >= 0 && r.stratForced) st.seen.cond = true;
+    L.emit('cloud', { kind, cls: Physics.stabilityClass(st.gamma).key, inv: st.inv.on, key: condKey() });
   }
   /** 계산 한 걸음 */
   function simStep() {
@@ -291,12 +285,6 @@ const CloudLab = (function () {
 
   function buildMore() {
     const m = sh.more;
-    ui.revealT = Toggle('빈칸 모두 보기', st.reveal, v => { st.reveal = v; renderCases(true); });
-    ui.cases = h('div', { class: 'case-grid' });
-    m.appendChild(Fold('대기 안정도와 구름의 생성 <span class="tag">교과서 그림 Ⅲ-14 ~ Ⅲ-17</span>', h('div', null,
-      h('p', { html: '같은 지표 공기(30 ℃ · 14 ℃, 상승 응결 고도 2 km)를 기온 감률이 다른 세 대기에서 올려 보세요. 대기 안정도에 따라 <b>어떤 구름</b>이 생기는지 비교해요.' }),
-      h('div', { class: 'ch-row' }, ui.revealT.el, h('span', { class: 'note', text: '그 대기에서 구름이 생기는 모습을 직접 보면 빈칸이 채워져요. (장면의 구름은 정성적 표현)' })),
-      ui.cases), true, 'wide'));
     // 역전층 탐구 (심화)
     ui.invOn = Toggle('역전층 넣기', st.inv.on, v => { st.inv.on = v; syncInvUI(); conditionsChanged(); });
     ui.invBase = NumField({ label: '시작 높이', min: 0.2, max: 5, step: 0.1, decimals: 1, value: st.inv.base, unit: 'km', cls: 'compact', onCommit: v => { st.inv.base = v; if (st.inv.on) conditionsChanged(); } });
@@ -625,7 +613,6 @@ const CloudLab = (function () {
     void same;
     renderGuide(fr, b, par, iv);
     renderBadge(iv);
-    renderCases();
     if (ch) ch.check();
   }
   const overlap = (a, b) => !(a.x + a.width < b.x || b.x + b.width < a.x || a.y + a.height < b.y || b.y + b.height < a.y);
@@ -692,60 +679,6 @@ const CloudLab = (function () {
       const parts = iv.warm.map(([a, b2]) => `${fApprox(a)}~${b2 >= ZMAX - 1e-6 ? ZMAX : fApprox(b2)} km`);
       ui.invInfo.innerHTML = `주위 기온: ${fZ(st.inv.base)} km에서 ${fT(Physics.envTemp(P, st.inv.base))} ℃ → ${fZ(top)} km에서 ${fT(Physics.envTemp(P, top))} ℃ (역전층 감률 ${fmt(-st.inv.dT / st.inv.depth, 1)} ℃/km)<br>공기 덩어리가 주위보다 따뜻한 구간: <b>${parts.length ? parts.join(', ') : '없음'}</b>`;
     } else ui.invInfo.textContent = '역전층을 넣으면 공기 덩어리가 주위보다 따뜻한 구간이 여기에 나타나요.';
-  }
-  /* ───────── 세 가지 대기와 구름 (교과서 그림 Ⅲ-14 ~ Ⅲ-17 · 학습지 빈칸) ───────── */
-  const blank = (k, ans) => (st.reveal || st.seen[k] ? `<span class="blank filled">${ans}</span>` : '<span class="blank" aria-label="빈칸"></span>');
-  const CASES = [
-    { k: 'absolute-stable', id: 'stable', g: 4, title: '절대 안정 → 층운형 구름', range: '기온 감률 4 ℃/km (γ &lt; 5)',
-      lines: () => [
-        `지표면의 공기 덩어리를 강제로 상승시키면 공기 덩어리의 온도는 주위 기온보다 항상 <span class="nw">${blank('stable', '낮다')}.</span>`,
-        '공기 덩어리는 포화 여부와 관계없이 원래 위치로 되돌아가려 한다.',
-        `공기 덩어리가 포화되어 구름이 생기더라도 연직 운동이 억제되므로, 두께가 ${blank('stable', '얇은')} 층운형 구름이 생성된다.`],
-      exps: [{ t: '2.50 km까지 올리기', z: 2.5, d: '응결 고도 위로 강제로 올린 뒤 놓으면?' }] },
-    { k: 'absolute-unstable', id: 'unstable', g: 12, title: '절대 불안정 → 적운형 구름', range: '기온 감률 12 ℃/km (γ &gt; 10)',
-      lines: () => [
-        `상승하는 공기 덩어리의 온도는 주위 기온보다 항상 <span class="nw">${blank('unstable', '높다')}.</span>`,
-        '공기 덩어리는 포화 여부와 관계없이 원래 위치에서 멀어지려 하므로 연직 운동이 활발하다.',
-        `상승 응결 고도에 도달해 구름이 생기기 시작한 뒤에도 공기가 계속 상승하므로, 두께가 ${blank('unstable', '두꺼운')} 적운형 구름이 생성된다.`],
-      exps: [{ t: '0.50 km까지 올리기', z: 0.5, d: '응결 고도 아래에서 살짝 올렸다 놓으면?' }] },
-    { k: 'conditional', id: 'cond', g: 8, title: '조건부 불안정 → 층운형 → 적운형', range: '기온 감률 8 ℃/km (5 &lt; γ &lt; 10)',
-      lines: () => [
-        `지표면의 공기 덩어리를 강제로 상승시키면 ${blank('cond', '건조 단열 감률')}에 따라 온도가 낮아지다가, ${blank('cond', '상승 응결 고도')}에서 포화 상태가 된다. 이때 층운형 구름이 생성된다.`,
-        `공기 덩어리가 계속 상승해 온도가 주위 기온보다 높아지면, 강제로 상승시키는 힘이 없어도 ${blank('cond', '저절로')} 상승한다. 이때 적운형 구름이 생성된다.`],
-      exps: [{ t: '2.50 km까지 올리기', z: 2.5, d: '응결 고도 위 · 놓으면?' }, { t: '3.50 km까지 올리기', z: 3.5, d: '주위보다 따뜻해지는 높이(약 3.33 km) 위 · 놓으면?', keep: true }],
-      note: '이 조건에서는 약 <b>3.33 km</b>보다 높이 올라가면 공기 덩어리가 주위보다 따뜻해져, 놓아도 <b>저절로</b> 올라가요.' }
-  ];
-  /** 카드의 실험 버튼: 기본 지표 공기(30 ℃ · 14 ℃, 역전층 없음)와 그 감률로 맞추고 올리기 */
-  function runCase(c, e) {
-    const same = st.T0 === DEF.T0 && st.Td0 === DEF.Td0 && !st.inv.on && Math.abs(st.gamma - c.g) < 1e-9;
-    if (!same) {
-      Object.assign(st, { T0: DEF.T0, Td0: DEF.Td0, gamma: c.g });
-      st.inv.on = false;
-      ui.T0.set(DEF.T0); ui.Td0.setMax(DEF.T0); ui.Td0.set(DEF.Td0); ui.g.set(c.g); syncInvUI();
-      conditionsChanged();
-    } else if (!e.keep) resetMotion();
-    st.target = e.z; ui.tz.set(e.z);
-    liftTo(e.z);
-    sh.panel.scrollIntoView({ behavior: REDUCED_MOTION ? 'auto' : 'smooth', block: 'center' });
-  }
-  function renderCases(force) {
-    if (!ui.cases) return;
-    const k = Physics.stabilityClass(st.gamma).key;
-    const key = [k, st.reveal, st.inv.on, JSON.stringify(st.seen)].join('|');
-    if (!force && ui.cases.dataset.key === key) return;
-    ui.cases.dataset.key = key;
-    clear(ui.cases);
-    CASES.forEach((c, i) => {
-      const curCase = c.k === k && !st.inv.on;
-      const card = h('div', { class: 'case' + (curCase ? ' cur' : '') + (st.seen[c.id] ? ' done' : '') + ' case-' + c.id },
-        h('div', { class: 'case-head' }, h('span', { class: 'case-n', text: '①②③'[i] }), h('b', { html: c.title }), st.seen[c.id] ? h('span', { class: 'case-ok', text: '관찰 ✓' }) : null),
-        h('div', { class: 'case-range', html: c.range }),
-        h('ul', { class: 'case-lines' }, c.lines().map(t => h('li', { html: t }))),
-        c.note ? h('p', { class: 'note', html: c.note }) : null,
-        h('div', { class: 'ch-row' }, c.exps.map(e => Btn(e.t, 'sm accent', () => runCase(c, e), { title: e.d }))),
-        h('div', { class: 'case-d', html: c.exps.map(e => `${e.t.replace('까지 올리기', '')}: ${e.d}`).join('<br>') }));
-      ui.cases.appendChild(card);
-    });
   }
   function renderControls() {
     if (!ui.rel || !st.run) return;

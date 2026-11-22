@@ -70,18 +70,6 @@ const LclLab = (function () {
 
   function buildMore() {
     const m = sh.more;
-    m.appendChild(Fold('관찰 안내', h('div', { html: `
-      <ul><li><b style="color:var(--temp)">기온(빨간 점)</b>과 <b style="color:var(--dew)">이슬점(파란 점)</b> 사이가 어떻게 바뀌나요?</li>
-      <li>두 점이 만나는 높이와 장면의 <b>구름 바닥</b>이 같은 가로선 위에 있나요?</li></ul>` }), true));
-    ui.foldLCL = Fold('상승 응결 고도 구하기', h('div', { html: `
-      <p>불포화 공기는 1 km(1000 m) 오를 때마다 기온이 10 ℃, 이슬점이 2 ℃ 낮아져 두 값의 차이가 <b>8 ℃씩</b> 줄어요. 차이 1&nbsp;℃가 줄어드는 데 1000 ÷ 8 = <b>125&nbsp;m</b>가 걸려요.</p>
-      <div class="eq"><b>H(m) = 125 × (T<sub>0</sub> − Td<sub>0</sub>)</b></div>
-      <p id="lcl-calc"></p>
-      <p class="note">응결 고도 위에서는 기온과 이슬점이 함께 5 ℃/km씩 낮아져요. · 교과서 그림 Ⅲ-12</p>` }), false);
-    ui.foldLCL.addEventListener('toggle', () => {
-      if (ui.foldLCL.open && st.guided && !st.revealed) { ui.foldLCL.open = false; ui.ro.guide('', '', '먼저 공기를 올려 기온과 이슬점이 같아지는 높이를 찾아보세요. 그 높이에 닿으면 이 설명을 볼 수 있어요.'); }
-    });
-    m.appendChild(ui.foldLCL);
     // 더 해 보기: 실험 2개 + 도전 1개
     const exps = [
       { t: '이슬점을 높이면 구름 바닥은?', d: '기온 20 ℃ · 이슬점 12 ℃ → 16 ℃', run: () => setupExperiment({ T0: 20, Td0: 12 }, { T0: 20, Td0: 16 }, '이슬점 12 ℃ 공기를 비교용으로 남겼어요. 이슬점 16 ℃ 공기를 올려 구름 바닥을 비교해 보세요.') },
@@ -423,11 +411,6 @@ const LclLab = (function () {
     ui.ro.set('rh', `${fmt(rh, 0)}<small>%</small>`, sat ? '포화' : '불포화');
     renderGuide(p, Hn);
     renderControls();
-    const calc = document.getElementById('lcl-calc');
-    if (calc) {
-      const Hm = Math.round(125 * (st.T0 - st.Td0) * 10) / 10;       // m 단위 표시 (계산은 physics.js의 km 값과 같음)
-      calc.innerHTML = `지금 조건: H = 125 × (${fT(st.T0)} − ${fT(st.Td0)}) = <b>${Number.isInteger(Hm) ? Hm : Hm.toFixed(1)} m</b> (${fZ(Hn)} km)`;
-    }
     if (ch) ch.check();
   }
   function renderGuide(p, Hn) {
@@ -465,8 +448,6 @@ const LclLab = (function () {
     ui.goLCL.disabled = Math.abs(st.z - Hn) < 1e-9;
     ui.tLCL.el.hidden = st.guided;
     ui.tPath.el.querySelector('span').innerHTML = st.guided ? '전체 경로 보기' : '예상 경로';
-    ui.foldLCL.classList.toggle('waiting', st.guided && !st.revealed);
-    ui.foldLCL.querySelector('summary').innerHTML = st.guided && !st.revealed ? '상승 응결 고도 구하기 <span class="tag">응결 고도에 닿은 뒤 볼 수 있어요</span>' : '상승 응결 고도 구하기';
   }
 
   return {

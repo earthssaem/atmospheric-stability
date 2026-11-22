@@ -31,8 +31,7 @@ const StabLab = (function () {
   const L = Object.assign(baseLab(), { id: 'stab' });
   const st = {
     gamma: DEF.gamma, sat: DEF.sat, dz: DEF.dz,
-    paused: false, cmp: null, notice: '', reveal: false,
-    seen: {},                 // 관찰한 결과: stable · unstable · neutral (위로 올렸다 놓은 실험), A · B · C 구간
+    paused: false, cmp: null, notice: '',
     run: null, idx: 0, acc: 0, drag: null
   };
   L.st = st;
@@ -89,13 +88,6 @@ const StabLab = (function () {
     if (out === 'origin') return;
     const c = cls(), zk = zone();
     L.emit('outcome', { out, cls: c, zone: zk, sat: st.sat, gamma: st.gamma, up: rel.z > Z0, key: condKey() });
-    const expect = { stable: 'back', unstable: 'away', neutral: 'stay' }[c];
-    if (out === expect) {
-      if (rel.z > Z0) st.seen[c] = true;
-      const zz = ZONE[zk].k;
-      if (zz) st.seen[zz] = true;
-    }
-    renderTables();
   }
   /** 계산 한 걸음 */
   function simStep() {
@@ -298,14 +290,6 @@ const StabLab = (function () {
 
   function buildMore() {
     const m = sh.more;
-    ui.revealT = Toggle('빈칸 모두 보기', st.reveal, v => { st.reveal = v; renderTables(true); });
-    ui.tbl1 = h('div');
-    m.appendChild(Fold('안정 · 불안정 · 중립 정리', h('div', null,
-      h('p', { html: '공기 덩어리를 강제로 상승시키거나 하강시켰을 때, <b>원래 위치로 되돌아가려</b> 하거나 <b>원래 위치에서 멀어지려는</b> 경향을 대기 안정도라고 해요. 움직인 공기 덩어리의 기온을 <b>같은 높이의 주위 기온</b>과 비교해 판단해요.' }),
-      h('div', { class: 'ch-row' }, ui.revealT.el, h('span', { class: 'note', text: '공기 덩어리를 위로 올렸다 놓아 결과를 보면 그 칸의 빈칸이 채워져요.' })),
-      ui.tbl1), true, 'wide'));
-    ui.tbl2 = h('div');
-    m.appendChild(Fold('기온 감률에 따른 대기 안정도 <span class="tag">A · B · C 구간</span>', ui.tbl2, true));
     ui.chBox = h('div');
     const cmpRow = h('div', { class: 'ch-row' });
     ui.cmp = CompareUI(cmpRow, saveCompare, () => { st.cmp = null; afterCompareChange(); });
@@ -314,33 +298,6 @@ const StabLab = (function () {
       h('div', { class: 'inv-fields' }, ui.g.el, ui.dz.el),
       cmpRow, h('div', { class: 'ch-row' }, Btn('조건 기본값', 'sm', resetDefaults)),
       h('div', { class: 'more-sec' }, h('h4', { text: '도전' }), ui.chBox)), false));
-  }
-
-  const blank = (k, ans) => (st.reveal || st.seen[k] ? `<span class="blank filled">${ans}</span>` : '<span class="blank" aria-label="빈칸"></span>');
-  /** 정리 표 두 개: 지금 조건에 해당하는 칸을 밝게, 관찰한 칸은 빈칸을 채운다 */
-  function renderTables(force) {
-    if (!ui.tbl1) return;
-    const c = cls(), zk = zone(), zz = ZONE[zk].k;
-    const key = [c, zk, st.sat, st.reveal, JSON.stringify(st.seen)].join('|');
-    if (!force && ui.tbl1.dataset.key === key) return;
-    ui.tbl1.dataset.key = key;
-    const ref = `${satName(st.sat)} 단열 감률`;
-    const col = (k, cells) => cells.map(x => `<td class="${k === c ? 'cur' : ''}">${x}</td>`).join('');
-    ui.tbl1.innerHTML = `<table class="stab-table"><thead><tr><th></th>${['stable', 'unstable', 'neutral'].map(k => `<th class="${k === c ? 'cur' : ''} c-${k}">${CLS[k]}</th>`).join('')}</tr></thead><tbody>
-      <tr><th>정의</th>${col('stable', ['공기 덩어리를 상승·하강시켰을 때 <b>원래 위치로 되돌아가려는</b> 상태'])}${col('unstable', ['원래 위치에서 <b>멀어지는 방향</b>으로 계속 상승·하강하려는 상태'])}${col('neutral', ['상승·하강시킨 위치에 <b>그대로 머무르려는</b> 상태'])}</tr>
-      <tr><th>강제 상승시킨<br>공기 덩어리의 기온</th>${col('stable', [`주위 기온보다 ${blank('stable', '낮다')}`])}${col('unstable', [`주위 기온보다 ${blank('unstable', '높다')}`])}${col('neutral', [`주위 기온과 ${blank('neutral', '같다')}`])}</tr>
-      <tr><th>기온 감률 비교</th>${col('stable', [`기온 감률 ${blank('stable', '&lt;')} ${ref}`])}${col('unstable', [`기온 감률 ${blank('unstable', '&gt;')} ${ref}`])}${col('neutral', [`기온 감률 ${blank('neutral', '=')} ${ref}`])}</tr>
-      <tr><th>특징</th>${col('stable', ['공기의 연직 운동이 억제되어 대류가 잘 일어나지 않고, 대기 오염 물질의 농도가 높아지며, 공기가 포화된 경우 <b>층운형</b> 구름이 생길 수 있다.'])}${col('unstable', ['공기의 연직 운동이 활발하여 대류가 잘 일어나고, 대기 오염 물질이 잘 퍼져 나가며, 공기가 포화된 경우 <b>적운형</b> 구름이 생길 수 있다.'])}${col('neutral', ['공기의 대류가 약하며, 대기의 혼합이 잘 일어나지 않는다.'])}</tr>
-      </tbody></table>
-      <p class="note">지금은 <b>${st.sat ? '포화' : '불포화'} 공기</b>라서 ${ref}(${lapse()} ℃/km)과 비교해요. ${st.sat ? '불포화 공기는 건조 단열 감률(10 ℃/km)과 비교해요.' : '포화된 공기는 습윤 단열 감률(5 ℃/km)과 비교해요.'}</p>`;
-    const row = (k, name, cond, desc, g) => `<div class="zone-row${zz === k ? ' cur' : ''} z-${k}"><div class="zone-head"><span class="zone-k">${k}</span><b>${name}</b></div>
-      <div class="zone-body"><div>→ ${cond}</div><div>→ ${desc}</div></div><button type="button" class="btn sm" data-g="${g}">γ ${g}로 보기</button></div>`;
-    ui.tbl2.innerHTML = `<p>건조 단열 감률(10 ℃/km)과 습윤 단열 감률(5 ℃/km)을 기준으로 주위 기온 감률을 세 구간으로 나눠요. 그래프에서 기온선이 어느 구간에 놓이는지 보세요.</p>
-      ${row('A', 'A 구간: 절대 안정', `기온 감률 ${blank('A', '&lt;')} 습윤 단열 감률`, '공기의 포화 여부에 관계없이 원래 위치로 되돌아가려 한다.', 4)}
-      ${row('B', 'B 구간: 절대 불안정', `기온 감률 ${blank('B', '&gt;')} 건조 단열 감률`, '공기의 포화 여부에 관계없이 원래 위치에서 멀어지려 한다.', 12)}
-      ${row('C', 'C 구간: 조건부 불안정', `습윤 단열 감률 ${blank('C', '&lt;')} 기온 감률 ${blank('C', '&lt;')} 건조 단열 감률`, '공기 덩어리의 포화 여부에 따라 안정도가 달라진다. <b>불포화 상태면 안정</b>하고, <b>포화 상태면 불안정</b>하다.', 8)}
-      <p class="note">${zz ? `지금 γ = ${fmt(st.gamma, 1)} ℃/km는 <b>${ZONE[zk].t}</b> 구간이에요.` : `지금 γ = ${fmt(st.gamma, 1)} ℃/km는 구간의 <b>경계값</b>이에요(${zk === 'moist-neutral' ? '포화 공기만 중립' : '불포화 공기만 중립'}).`} 빈칸은 그 구간에서 공기 덩어리를 놓아 보면 채워져요.</p>`;
-    ui.tbl2.querySelectorAll('button[data-g]').forEach(b => b.addEventListener('click', () => setCond({ gamma: +b.dataset.g })));
   }
 
   function buildChallenges() {
@@ -522,7 +479,6 @@ const StabLab = (function () {
     ui.ro.set('m', `<span style="font-size:21px">${mv.short}</span>`, mv.sub);
     renderGuide(fr, d);
     renderBadge();
-    renderTables();
     if (ch) ch.check();
   }
   const overlap = (a, b) => !(a.x + a.width < b.x || b.x + b.width < a.x || a.y + a.height < b.y || b.y + b.height < a.y);

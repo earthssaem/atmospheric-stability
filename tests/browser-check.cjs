@@ -123,13 +123,10 @@ const ok = (c, label, detail) => { if (c) { pass++; console.log('  ✓ ' + label
     await ev(`${S}.force(1)`); await page.waitForTimeout(2200);
     r = await ro('stab');
     ok(r[0] === '0.0℃' && r[1] === '2.0℃' && r[2] === '낮다↓' && Math.abs(await ev(`${S}.cur().z`) - 3) < 1e-9, 'γ 8 불포화 +1 km: 공기 0 ℃ · 주위 2 ℃ (낮다)', r);
-    const blankBefore = await ev(() => document.querySelectorAll('#lab-stab .stab-table .blank.filled').length);
     await ev(`${S}.release()`); await page.waitForTimeout(9000);
     let z = await ev(`${S}.cur().z`);
     r = await ro('stab');
     ok(Math.abs(z - 2) < 0.03 && /되돌아왔어요/.test(r.guide) && /안정/.test(r.guide), '놓으면 원래 위치로 되돌아옴 → 안정', { z, g: r.guide });
-    const filled = await ev(() => [...document.querySelectorAll('#lab-stab .stab-table .blank.filled')].map(b => b.textContent).join(','));
-    ok(blankBefore === 0 && /낮다/.test(filled) && /</.test(filled), '관찰한 칸(안정)의 빈칸이 채워짐: 낮다 · <', filled);
     // 되감기: 같은 순간은 같은 수치
     const mid = await ev(`Math.floor(${S}.st.run.frames.length * 0.5)`);
     await ev(`${S}.seek(${mid})`); const a = await ro('stab');
@@ -193,10 +190,6 @@ const ok = (c, label, detail) => { if (c) { pass++; console.log('  ✓ ' + label
     await page.waitForTimeout(9000);
     st4 = await sceneTxt();
     ok(/층운형 → 적운형/.test(st4), '조건부 불안정: 강제로 올려 층운형 → 저절로 올라가 적운형', st4.slice(0, 200));
-    const card3 = await ev(() => document.querySelector('#lab-cloud .case-cond').textContent);
-    ok(/건조 단열 감률/.test(card3) && /상승 응결 고도/.test(card3) && /저절로/.test(card3) && /관찰 ✓/.test(card3), '③ 조건부 불안정 카드의 빈칸이 채워짐', card3.slice(0, 120));
-    const card1 = await ev(() => !!document.querySelector('#lab-cloud .case-stable .blank.filled'));
-    ok(card1 === false, '관찰하지 않은 ① 절대 안정 카드는 빈칸 그대로');
     r = await ro('cloud');
     ok(/표시 범위/.test(r.guide) && r[0] === '6.00km', '상한 도달: "표시 범위에 도달했어요"', r);
     // 되감기
@@ -253,8 +246,8 @@ const ok = (c, label, detail) => { if (c) { pass++; console.log('  ✓ ' + label
     await ev(`${F}.setKind('steam')`); await ev(`${F}.setS(0.2)`); const a = await ro('fog');
     await ev(`${F}.setS(1)`); const b = await ro('fog');
     ok(a[0] === '2.0℃' && b[0] === '2.0℃' && parseFloat(b[2]) > parseFloat(a[2]) && b[3] === '100%', '증발 안개: 기온 2 ℃ 그대로, 수증기압이 늘어 포화', { a, b });
-    const extra = await ev(() => [...document.querySelectorAll('#lab-fog .more summary')].map(x => x.textContent).join('|'));
-    ok(!/안개란|정리/.test(extra) && /자유 탐구/.test(extra), '아래 부가 설명(안개란? · 정리 표) 없음, 「자유 탐구 · 도전」만', extra);
+    const extra = await ev(() => ['lcl', 'foehn', 'stab', 'cloud', 'fog'].map(t => [...document.querySelectorAll('#lab-' + t + ' .more summary')].map(x => x.textContent).join('/')).join(' | '));
+    ok(!/안개란|정리|원리|관찰 안내|구하기|단계별 표|구름의 생성|감률에 따른/.test(extra) && !/blank|stab-table|stage-table|case-grid|fog-table/.test(await ev(() => document.querySelector('main').innerHTML)), '모든 탭: 아래 부가 설명 · 정리 표 없음 (더 해 보기 · 자유 탐구 · 도전만)', extra);
     // 안개는 갑자기 나타나지 않고 서서히 피어오르며, 멈춰 있어도 장면은 천천히 흐른다
     await ev(`${F}.setKind('radiation')`); await ev(`${F}.resetDefaults()`); await ev(`${F}.step(1)`);   // 앞에서 바꾼 「흐림」을 기본값(맑음 · 바람 약함)으로
     const v0 = await ev(`${F}.view().vis`); await page.waitForTimeout(1800);
