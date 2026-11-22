@@ -220,6 +220,31 @@ const ok = (c, label, detail) => { if (c) { pass++; console.log('  ✓ ' + label
     void info; void r;
   }
 
+  console.log('[안개의 종류]');
+  {
+    await page.click('#tab-btn-fog'); await page.waitForTimeout(200);
+    const F = 'App.TABS.fog.api';
+    let r = await ro('fog');
+    ok(r[0] === '15.0℃' && r[1] === '10.0℃' && r[4] === '없음', '복사 안개 처음: 기온 15 ℃ · 이슬점 10 ℃ · 안개 없음', r);
+    await ev(`${F}.goStage(1)`); r = await ro('fog');
+    const btn2 = await ev(() => document.querySelectorAll('#lab-fog .stages .btn')[1].textContent);
+    ok(r[0] === '10.0℃' && r[3] === '100%' && /포화/.test(r.guide) && /새벽/.test(btn2), '안개 시작: 기온 = 이슬점 10 ℃ · 상대 습도 100 % · 새벽', { r, btn2 });
+    await ev(`${F}.setS(1)`); r = await ro('fog');
+    ok(r[0] === '9.4℃' && /안개/.test(r[4]), '새벽 5시: 9.4 ℃까지 식어 안개', r);
+    const seen = await ev(() => document.querySelector('#lab-fog .fog-table tr.cur').textContent);
+    ok(/관찰 ✓/.test(seen), '정리 표에 관찰 ✓', seen.slice(0, 40));
+    await ev(`${F}.setCond({ sky: 'cloudy' })`); await ev(`${F}.setS(1)`); r = await ro('fog');
+    const btnNo = await ev(() => document.querySelectorAll('#lab-fog .stages .btn')[1].textContent);
+    ok(r[4] === '없음' && /생기지 않아요/.test(r.guide) && /안개 없음/.test(btnNo), '흐린 밤: 이슬점에 닿지 않아 안개 없음', { r, btnNo });
+    await ev(`${F}.setKind('upslope')`); await ev(`${F}.goStage(1)`); r = await ro('fog');
+    ok(r[0] === '11.0℃' && r[1] === '11.0℃' && Math.abs(await ev(`${F}.state().z`) - 0.5) < 1e-6, '활승 안개: 응결 고도 0.5 km에서 기온 = 이슬점 11 ℃', r);
+    await ev(`${F}.setKind('steam')`); await ev(`${F}.setS(0.2)`); const a = await ro('fog');
+    await ev(`${F}.setS(1)`); const b = await ro('fog');
+    ok(a[0] === '2.0℃' && b[0] === '2.0℃' && parseFloat(b[2]) > parseFloat(a[2]) && b[3] === '100%', '증발 안개: 기온 2 ℃ 그대로, 수증기압이 늘어 포화', { a, b });
+    const cur = await ev(() => document.querySelector('#lab-fog .fog-table tr.cur .fog-n').textContent);
+    ok(/증발 안개/.test(cur), '정리 표에서 지금 안개(증발 안개) 줄 강조', cur);
+  }
+
   console.log('[장면 · 그래프 같은 높이 정렬]');
   for (const [t, act] of [['lcl', 'App.TABS.lcl.api.setZ(2.37)'], ['foehn', 'App.TABS.foehn.api.setS(0.33)'], ['stab', 'App.TABS.stab.api.liftTo(3.3)'], ['cloud', 'App.TABS.cloud.api.seek(Math.floor(App.TABS.cloud.api.st.run.frames.length / 2))']]) {
     await page.click('#tab-btn-' + t); await page.waitForTimeout(200);

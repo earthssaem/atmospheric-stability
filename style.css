@@ -227,6 +227,18 @@ table.stab-table { width: 100%; border-collapse: separate; border-spacing: 0; fo
 .nw { white-space: nowrap; }
 .cloud-sh { filter: drop-shadow(0 1px 2.5px rgba(40, 62, 84, .35)); }
 
+/* 5. 안개의 종류: 종류 고르기 · 정리 표 */
+.fog-kinds button:nth-child(4) { margin-left: 10px; }
+.fog-cond { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; }
+table.fog-table { width: 100%; border-collapse: collapse; font-size: 15px; line-height: 1.45; }
+.fog-table th, .fog-table td { border-bottom: 1px solid #EFECE5; padding: 7px 10px; text-align: left; vertical-align: middle; word-break: keep-all; }
+.fog-table th.fog-g { width: 150px; font-size: 14px; font-weight: 800; }
+.fog-table th.fog-cool { background: #E8F0F7; color: #1F5A88; }
+.fog-table th.fog-vapor { background: #E9F2E6; color: #2E6A2A; }
+.fog-table td.fog-n { width: 160px; font-weight: 800; color: #9C3B2E; white-space: nowrap; }
+.fog-table td.fog-b { width: 70px; text-align: right; }
+.fog-table tr.cur td { background: #F2F8F6; }
+
 /* ───────── 현재 수치 ───────── */
 .readouts { display: grid; grid-template-columns: repeat(var(--cells, 5), 146px) minmax(240px, 1fr); gap: 0; margin-top: 10px; background: #fff; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 .ro { padding: 6px 14px 7px; border-right: 1px solid #EFECE5; min-width: 0; }

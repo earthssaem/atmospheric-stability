@@ -8,9 +8,10 @@ const App = (function () {
     lcl: typeof LclLab !== 'undefined' ? LclLab : null,
     foehn: typeof FoehnLab !== 'undefined' ? FoehnLab : null,
     stab: typeof StabLab !== 'undefined' ? StabLab : null,
-    cloud: typeof CloudLab !== 'undefined' ? CloudLab : null
+    cloud: typeof CloudLab !== 'undefined' ? CloudLab : null,
+    fog: typeof FogLab !== 'undefined' ? FogLab : null
   };
-  const ORDER = ['lcl', 'foehn', 'stab', 'cloud'];
+  const ORDER = ['lcl', 'foehn', 'stab', 'cloud', 'fog'];
   let active = 'lcl';
 
   function show(id, focus) {

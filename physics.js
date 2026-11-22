@@ -215,8 +215,72 @@
     return { z: z, v: v, a: a, b: d * (z - z0), hit: hit };
   }
 
+  /* ───────────── 안개: 지표 부근의 공기가 포화되는 과정 ─────────────
+   * 공기 속 수증기의 양을 수증기압 q(hPa)로 나타낸다. q가 포화 수증기압 E(T)보다 크면 E(T)만 수증기로 남고
+   * 나머지(q − E)는 응결해 안개 물방울이 된다. 안개가 생기는 두 가지 방법(교과서):
+   *  ① 공기의 냉각: 수증기량은 그대로인 채 기온이 이슬점까지 내려감 (포화 수증기압 곡선 그래프에서 왼쪽으로)
+   *  ② 수증기량의 증가: 기온은 그대로인 채 수증기가 늘어 포화 수증기압에 이름 (그래프에서 위로)
+   * 안개마다 처음 기온·이슬점과 냉각·증발 정도는 과정을 보여 주려고 고른 교육용 값이다. */
+  function dewPointOf(e) { var a = Math.log(e / 6.112); return 243.12 * a / (17.62 - a); }
+  function moistAir(T, q) {
+    var E = satVapor(T), sat = q >= E - 1e-9, e = Math.min(q, E);
+    return { T: T, q: q, e: e, E: E, Td: sat ? T : dewPointOf(e), rh: sat ? 100 : 100 * e / E, saturated: sat, water: Math.max(0, q - E) };
+  }
+  var FOG = {
+    radiation: { group: 'cool', T0: 15, Td0: 10, drop: { 'clear|calm': 5.6, 'clear|windy': 3, 'cloudy|calm': 2.5, 'cloudy|windy': 1.5 } },
+    advection: { group: 'cool', T0: 18, Td0: 14, warmEnd: 0.35, k: 4.5 },
+    upslope: { group: 'cool', T0: 16, Td0: 12 },
+    steam: { group: 'vapor', T0: 2, Td0: -3, waterStart: 0.3, mix: 0.6, k: 3.5 },
+    frontal: { group: 'vapor', T0: 5, Td0: 1, add: { weak: 1.2, strong: 3.5 } }
+  };
+  /** 처음에 빠르고 차츰 느려지는 변화 (0 → 1) */
+  function easeOut(s, k) { return (1 - Math.exp(-k * s)) / (1 - Math.exp(-k)); }
+  /**
+   * 안개 과정의 진행 정도 s(0~1)에서 공기의 상태
+   * o: radiation {sky: 'clear'|'cloudy', wind: 'calm'|'windy'} · advection {sea: 찬 해수면 ℃} · upslope {M: 산 높이 km}
+   *    steam {water: 수면 ℃} · frontal {rain: 'weak'|'strong'}
+   */
+  function fogAt(kind, o, s) {
+    var c = FOG[kind], r;
+    s = Math.max(0, Math.min(1, s));
+    if (kind === 'radiation') {                 // 밤사이 지표면 복사 냉각: 맑고 바람이 약할수록 많이 식는다
+      r = moistAir(c.T0 - c.drop[o.sky + '|' + o.wind] * easeOut(s, 1.2), satVapor(c.Td0));
+    } else if (kind === 'advection') {          // 따뜻한 바다 위(그대로) → 찬 해수면 위에서 해수면 온도 쪽으로 식는다
+      var T = s > c.warmEnd ? o.sea + (c.T0 - o.sea) * Math.exp(-c.k * (s - c.warmEnd)) : c.T0;
+      r = moistAir(T, satVapor(c.Td0)); r.x = s; r.overCold = s > c.warmEnd;
+    } else if (kind === 'upslope') {            // 산 사면을 따라 상승: 응결 고도 모형(건조 단열 10, 이슬점 2 ℃/km)과 같음
+      var z = s * o.M, p = parcel(c.T0, c.Td0, z);
+      var q = p.saturated ? satVapor(c.T0 - DRY * p.H) : satVapor(p.Td);   // 응결 고도 위에서는 그때의 수증기량을 지닌 채 포화
+      r = moistAir(p.T, q); r.z = z; r.H = p.H;
+    } else if (kind === 'steam') {              // 찬 공기가 따뜻한 수면 위로: 증발한 수증기가 더해진다 (기온은 그대로라고 봄)
+      var q0 = satVapor(c.Td0), qMax = q0 + c.mix * Math.max(0, satVapor(o.water) - q0);
+      var q2 = s > c.waterStart ? q0 + (qMax - q0) * easeOut((s - c.waterStart) / (1 - c.waterStart), c.k) : q0;
+      r = moistAir(c.T0, q2); r.x = s; r.overWater = s > c.waterStart;
+    } else {                                    // 전선 안개: 빗방울이 찬 공기층에서 증발해 수증기가 늘어난다
+      r = moistAir(c.T0, satVapor(c.Td0) + c.add[o.rain] * easeOut(s, 1.2));
+    }
+    r.kind = kind; r.group = c.group; r.s = s;
+    return r;
+  }
+  /** 처음으로 포화되는(안개가 생기기 시작하는) 진행 정도. 끝까지 포화되지 않으면 null */
+  function fogOnset(kind, o) {
+    if (fogAt(kind, o, 0).saturated) return 0;
+    var N = 400, prev = 0;
+    for (var i = 1; i <= N; i++) {
+      var s = i / N;
+      if (fogAt(kind, o, s).saturated) {
+        var a = prev, b = s;
+        for (var k = 0; k < 40; k++) { var m = (a + b) / 2; if (fogAt(kind, o, m).saturated) b = m; else a = m; }
+        return b;
+      }
+      prev = s;
+    }
+    return null;
+  }
+
   return {
-    DRY: DRY, MOIST: MOIST, DEW: DEW, EPS: EPS, MOTION: MOTION, MOTION_DISP: MOTION_DISP,
+    DRY: DRY, MOIST: MOIST, DEW: DEW, EPS: EPS, MOTION: MOTION, MOTION_DISP: MOTION_DISP, FOG: FOG,
+    dewPointOf: dewPointOf, moistAir: moistAir, fogAt: fogAt, fogOnset: fogOnset,
     adiabatLapse: adiabatLapse, displaced: displaced, displacedStep: displacedStep,
     lcl: lcl, clampDew: clampDew, parcel: parcel,
     foehn: foehn, foehnAt: foehnAt,

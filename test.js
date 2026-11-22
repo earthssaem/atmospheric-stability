@@ -169,6 +169,23 @@ console.log('[대기 안정도 개념] 원래 위치 2 km · 10 ℃에서 강제
   ok(run(10, false, 3, 5).z === 3 && run(5, true, 1.4, 5).z === 1.4, '중립: 놓은 자리에 그대로');
 }
 
+console.log('[안개] 포화되는 두 가지 방법: 냉각 · 수증기량 증가');
+{
+  const O = { sky: 'clear', wind: 'calm', sea: 12, M: 0.8, water: 15, rain: 'strong' };
+  ok(near(P.dewPointOf(P.satVapor(10)), 10, 1e-9), '이슬점 ↔ 포화 수증기압 (10 ℃)');
+  const m = P.moistAir(9, P.satVapor(10));
+  ok(m.saturated && near(m.e, P.satVapor(9)) && m.water > 0 && m.rh === 100, '이슬점보다 더 식으면 포화 · 남는 수증기는 응결');
+  for (const k of ['radiation', 'advection']) ok(near(P.fogAt(k, O, 0).q, P.fogAt(k, O, 0.9).q) && P.fogAt(k, O, 0.9).T < P.fogAt(k, O, 0).T, `${k}: 수증기량은 그대로, 기온만 내려감`);
+  for (const k of ['steam', 'frontal']) ok(P.fogAt(k, O, 0).T === P.fogAt(k, O, 1).T && P.fogAt(k, O, 1).q > P.fogAt(k, O, 0).q, `${k}: 기온은 그대로, 수증기량 증가`);
+  ok(P.fogOnset('radiation', O) > 0.7 && near(P.fogAt('radiation', O, 1).T, 9.4), '복사 안개: 맑고 바람 약한 밤 → 새벽에 이슬점(10 ℃) 도달');
+  ok(P.fogOnset('radiation', { sky: 'cloudy', wind: 'calm' }) === null && P.fogOnset('radiation', { sky: 'clear', wind: 'windy' }) === null, '흐리거나 바람이 강하면 복사 안개 없음');
+  ok(P.fogOnset('advection', O) !== null && P.fogOnset('advection', { sea: 16 }) === null, '이류 안개: 해수면이 이슬점(14 ℃)보다 차가워야 생김');
+  ok(near(P.fogOnset('upslope', O), 0.625, 1e-6) && near(P.fogAt('upslope', O, 0.625).z, 0.5, 1e-6), '활승 안개: 상승 응결 고도 0.5 km에서 생김');
+  ok(P.fogOnset('upslope', { M: 0.4 }) === null, '산이 응결 고도보다 낮으면 활승 안개 없음');
+  ok(P.fogOnset('steam', O) !== null && P.fogOnset('steam', { water: 3 }) === null, '증발 안개: 수면이 충분히 따뜻해야 생김');
+  ok(P.fogOnset('frontal', O) !== null && P.fogOnset('frontal', { rain: 'weak' }) === null, '전선 안개: 증발한 수증기가 충분해야 생김');
+}
+
 console.log('[상대 습도]');
 {
   ok(P.relHumidity(10, 10) === 100, '기온 = 이슬점 → 100 %');
