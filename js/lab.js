@@ -132,6 +132,16 @@ function Readouts(container, defs) {
   const guide = h('div', { class: 'ro-guide', 'aria-live': 'polite' });
   container.appendChild(guide);
   let lastGuide = '';
+  /* 안내 문장이 정해 둔 줄 수(넓은 화면 2줄 · 폰 3줄)를 넘으면 칸을 키우지 않고 글자를 조금 줄인다 → 칸 높이가 늘 같음 */
+  function fitGuide() {
+    const box = guide.querySelector('.msg'), fit = box && box.firstChild;
+    if (!fit || !box.clientWidth) return;
+    fit.style.fontSize = '';
+    const maxH = parseFloat(getComputedStyle(box).minHeight) || 0;
+    let fs = parseFloat(getComputedStyle(fit).fontSize), n = 0;
+    while (maxH && fit.getBoundingClientRect().height > maxH + 1 && n < 6) { fs -= 1; fit.style.fontSize = fs + 'px'; n += 1; }
+  }
+  if (window.ResizeObserver) new ResizeObserver(() => fitGuide()).observe(guide);   // 탭이 다시 보이거나 폭이 바뀌면 다시 맞춤
   return {
     set(key, html, sub) {
       const c = cells[key];
@@ -141,8 +151,8 @@ function Readouts(container, defs) {
     },
     guide(stateLabel, stateCls, html) {
       // 상태 이름이 없을 때도 자리를 남겨 칸 높이가 바뀌지 않게 함
-      const g = (stateLabel ? `<span class="state ${stateCls || ''}">${stateLabel}</span>` : '<span class="state" style="visibility:hidden" aria-hidden="true">·</span>') + `<span class="msg">${html}</span>`;
-      if (g !== lastGuide) { guide.innerHTML = g; lastGuide = g; }
+      const g = (stateLabel ? `<span class="state ${stateCls || ''}">${stateLabel}</span>` : '<span class="state" style="visibility:hidden" aria-hidden="true">·</span>') + `<span class="msg"><span class="fit">${html}</span></span>`;
+      if (g !== lastGuide) { guide.innerHTML = g; lastGuide = g; fitGuide(); }
     }
   };
 }

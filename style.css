@@ -239,7 +239,15 @@ table.stab-table { width: 100%; border-collapse: separate; border-spacing: 0; fo
 .cloud-sh { filter: drop-shadow(0 1px 2.5px rgba(40, 62, 84, .35)); }
 
 /* 5. 안개의 종류: 종류 고르기 · 정리 표 */
-.fog-kinds button:nth-child(4) { margin-left: 10px; }
+.fog-kinds { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.fk-group { display: flex; align-items: center; gap: 4px; padding: 3px 3px 3px 12px; border-radius: 12px; }
+.fk-group .seg { background: rgba(255,255,255,.55); }
+.fk-cool { background: #DCE8F3; }
+.fk-vapor { background: #DDEBD8; }
+.fk-cap { font-size: 14px; font-weight: 800; white-space: nowrap; margin-right: 4px; }
+.fk-cool .fk-cap { color: #1F5A88; }
+.fk-vapor .fk-cap { color: #2E6A2A; }
+@media (max-width: 760px) { .fk-group { flex: 1 1 100%; } .fk-group .seg { flex: 1; } }
 .fog-cond { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; }
 table.fog-table { width: 100%; border-collapse: collapse; font-size: 15px; line-height: 1.45; }
 .fog-table th, .fog-table td { border-bottom: 1px solid #EFECE5; padding: 7px 10px; text-align: left; vertical-align: middle; word-break: keep-all; }
@@ -271,6 +279,7 @@ table.fog-table { width: 100%; border-collapse: collapse; font-size: 15px; line-
 .ro-guide .state.neutral { background: var(--soft); color: var(--ink-2); }
 /* 안내 문장은 늘 두 줄 자리를 차지: 문장이 바뀌어 한 줄 ↔ 두 줄이 되어도 칸 높이(와 화면 배치)가 흔들리지 않게 */
 .ro-guide .msg { min-height: 2.8em; }
+.ro-guide .msg .fit { display: block; }
 
 /* ───────── 조작부 ───────── */
 .ctrl-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }

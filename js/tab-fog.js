@@ -127,7 +127,16 @@ const FogLab = (function () {
       sceneTitle: '지표 부근 단면', graphTitle: '포화 수증기압 곡선',
       sceneLabel: '안개가 생기는 과정을 보여 주는 지표 부근 단면', graphLabel: '기온에 따른 포화 수증기압 곡선과 공기의 상태 변화'
     });
-    ui.kind = Seg(KINDS.map(x => ({ value: x.k, label: x.name, title: stripTags(DESC[x.k]) })), st.kind, v => setKind(v), { label: '안개 종류', cls: 'fog-kinds' });
+    // 안개 종류: 「공기의 냉각」과 「수증기량의 증가」 두 묶음으로 나눠 고름
+    ui.kind = (function () {
+      const el = h('div', { class: 'fog-kinds', role: 'group', 'aria-label': '안개 종류' });
+      const segs = [['cool', '공기의 냉각'], ['vapor', '수증기량의 증가']].map(([gk, cap]) => {
+        const sg = Seg(KINDS.filter(x => x.group === gk).map(x => ({ value: x.k, label: x.name, title: stripTags(DESC[x.k]) })), st.kind, v => setKind(v), { label: cap });
+        el.appendChild(h('div', { class: 'fk-group fk-' + gk }, h('span', { class: 'fk-cap', text: cap }), sg.el));
+        return sg;
+      });
+      return { el, set(v) { segs.forEach(sg => sg.set(v)); } };
+    })();
     ui.condBox = h('div', { class: 'cond-group fog-cond' });
     const tail = h('div', { class: 'cond-tail' });
     ui.cmp = CompareUI(tail, saveCompare, () => { st.cmp = null; ui.cmp.show(''); renderLegend(); rebuildAll(); });
@@ -240,114 +249,94 @@ const FogLab = (function () {
   function layout() { const f = layoutShell(sh); if (!f) return; rebuildAll(); }
   function rebuildAll() { if (!sh.frame) { render(); return; } buildScene(sh.frame); buildGraph(sh.frame); render(); }
 
-  /* 장면 좌표: 지면 yG, 위쪽 끝 top */
-  function sceneGeo(f) {
-    const W = f.sceneW, yG = f.yOf(0), top = 18;
-    return { W, yG, top, H: f.H };
+  /* ═════════ 장면 ═════════
+   * 정적인 풍경(지형 · 나무 · 집 · 바다)은 조건이 바뀔 때만 그리고, 하늘 · 화살표 · 안개는 매 순간 다시 그린다.
+   * 안개는 흐림 효과(feGaussianBlur)를 준 흰 덩어리로 그려 부드럽게 보이게 한다. 모든 그림은 정성적 표현. */
+  function sceneGeo(f) { return { W: f.sceneW, yG: f.yOf(0), top: 18, H: f.H }; }
+  const P2 = pts => 'M' + pts.map(p => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' L');
+  function smoothLine(pts) {        // 점들을 지나는 부드러운 곡선(카디널 스플라인)
+    let d = `M${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+      const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6], c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+      d += ` C${c1[0].toFixed(1)} ${c1[1].toFixed(1)} ${c2[0].toFixed(1)} ${c2[1].toFixed(1)} ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
+    }
+    return d;
   }
-  function buildScene(f) {
-    const svg = sh.sceneSvg; clear(svg);
-    const g = sceneGeo(f), W = g.W, yG = g.yG;
-    const defs = s('defs', null, svg);
-    E.skyG = s('linearGradient', { id: 'fogsky', x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
-    E.sky0 = s('stop', { offset: '0%' }, E.skyG); E.sky1 = s('stop', { offset: '100%' }, E.skyG);
-    E.skyR = s('rect', { x: 0, y: 0, width: W, height: g.H, fill: 'url(#fogsky)' }, svg);
-    E.back = s('g', null, svg);      // 하늘의 별 · 달 · 구름 등 (그때그때)
-    E.stat = s('g', null, svg);      // 지형 (조건이 바뀔 때만)
-    E.dyn = s('g', null, svg);       // 화살표 · 빗방울 등 (매 순간)
-    E.fog = s('g', { class: 'cloud-sh' }, svg);
-    E.parcel = makeParcel(svg, { seed: 23 });
-    E.tag = s('g', null, svg);
-    E.tagBg = s('rect', { rx: 8, fill: '#fff', stroke: '#C9C4B8', opacity: 0.95 }, E.tag);
-    E.tagT = txt({ class: 'lb-sm tnum', fill: 'var(--temp)' }, '', E.tag);
-    E.tagD = txt({ class: 'lb-sm tnum', fill: 'var(--dew)' }, '', E.tag);
-    E.info = txt({ x: 12, y: 36, class: 'lb halo-sky' }, '', svg);
-    const S0 = E.stat;
-    const groundPath = (pts, fill) => s('path', { d: 'M' + pts.map(p => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' L') + ` L${W} ${g.H} L0 ${g.H} Z`, fill }, S0);
-    if (st.kind === 'radiation') {
-      groundPath([[0, yG - 26], [W * 0.18, yG - 14], [W * 0.35, yG], [W * 0.65, yG], [W * 0.82, yG - 16], [W, yG - 30]], '#4F6B4A');
-      txt({ x: W * 0.5, y: yG + 26, 'text-anchor': 'middle', class: 'lb-sm', fill: '#E8EFE4' }, '분지 · 골짜기 (찬 공기가 고임)', S0);
-    } else if (st.kind === 'advection') {
-      const xs = X('advection', 0.35), xc = W * 0.86;
-      const sea = s('linearGradient', { id: 'fogsea', x1: 0, y1: 0, x2: 1, y2: 0 }, defs);
-      [['0%', '#4FA6A0'], [(xs / W * 100).toFixed(0) + '%', '#4FA6A0'], [((xs / W + 0.12) * 100).toFixed(0) + '%', '#2F6E9E'], ['100%', '#245E8C']].forEach(([o, c]) => s('stop', { offset: o, 'stop-color': c }, sea));
-      s('rect', { x: 0, y: yG, width: xc, height: g.H - yG, fill: 'url(#fogsea)' }, S0);
-      s('path', { d: `M${xc} ${g.H} L${xc} ${yG + 2} L${xc + 10} ${yG - 6} L${W * 0.93} ${yG - 22} L${W} ${yG - 30} L${W} ${g.H} Z`, fill: '#C9B48A' }, S0);   // 해안 (바다를 가리지 않게 따로)
-      txt({ x: xs / 2, y: yG + 24, 'text-anchor': 'middle', class: 'lb-sm', fill: '#fff' }, '따뜻한 바다', S0);
-      txt({ x: (xs + xc) / 2, y: yG + 24, 'text-anchor': 'middle', class: 'lb-sm tnum', fill: '#fff' }, `차가운 해수면 ${fT(st.sea)} ℃`, S0);
-      txt({ x: (xc + W) / 2, y: yG + 24, 'text-anchor': 'middle', class: 'lb-sm', fill: '#5A4A2A' }, '해안', S0);
-    } else if (st.kind === 'upslope') {
-      const geo = slopeGeo(g);
-      groundPath([[0, yG], [geo.x0, yG], [geo.x1, geo.yZ(st.M)], [W, yG - 6]], '#7E9A6E');
-      for (let z = 0.5; z <= geo.zTop + 1e-9; z += 0.5) {
-        s('line', { x1: 0, x2: W, y1: geo.yZ(z), y2: geo.yZ(z), stroke: '#fff', 'stroke-width': 1, opacity: 0.6 }, S0);
-        txt({ x: 8, y: geo.yZ(z) - 5, class: 'lb-sm tnum halo-sky', fill: '#485563' }, `${fmt(z, 1)} km`, S0);
-      }
-      const H = A(0).H != null ? A(1).H : 0.5;
-      if (H <= geo.zTop) {
-        s('line', { x1: 0, x2: W, y1: geo.yZ(H), y2: geo.yZ(H), stroke: 'var(--lcl)', 'stroke-width': 2, 'stroke-dasharray': '12 5 3 5' }, S0);
-        txt({ x: W - 8, y: geo.yZ(H) - 6, 'text-anchor': 'end', class: 'lb-sm halo-sky', fill: '#7A4E10' }, `상승 응결 고도 ${fZ(H)} km`, S0);
-      }
-      txt({ x: geo.x1 + 10, y: geo.yZ(st.M) + 4, class: 'lb-sm halo-sky tnum', fill: '#3D4A3A' }, `정상 ${fZ(st.M)} km`, S0);
-    } else if (st.kind === 'steam') {
-      const xw = X('steam', 0.3);
-      groundPath([[0, yG], [xw, yG]], '#DCE3E6');
-      s('rect', { x: xw, y: yG, width: W - xw, height: g.H - yG, fill: '#3E86A8' }, S0);
-      txt({ x: xw / 2, y: yG + 24, 'text-anchor': 'middle', class: 'lb-sm', fill: '#4E5D6A' }, '차가운 육지', S0);
-      txt({ x: (xw + W) / 2, y: yG + 24, 'text-anchor': 'middle', class: 'lb-sm tnum', fill: '#fff' }, `따뜻한 수면 ${fT(st.water)} ℃ (호수 · 강)`, S0);
-    } else {   // frontal
-      const fr = frontGeo(g);
-      s('path', { d: `M${fr.x0} ${yG} L${W} ${fr.yR} L${W} ${yG} Z`, fill: '#C9DCEB', opacity: 0.85 }, S0);
-      s('path', { d: `M0 ${g.top} L${W} ${g.top} L${W} ${fr.yR} L${fr.x0} ${yG} L0 ${yG} Z`, fill: '#F3DCCB', opacity: 0.6 }, S0);
-      s('line', { x1: fr.x0, y1: yG, x2: W, y2: fr.yR, stroke: '#B0513A', 'stroke-width': 3 }, S0);
-      for (let i = 1; i <= 4; i++) { const t = i / 5, x = lerp(fr.x0, W, t), y = lerp(yG, fr.yR, t); s('path', { d: `M${x - 7} ${y + 2} A7 7 0 0 1 ${x + 7} ${y - 2}`, fill: '#B0513A' }, S0); }
-      txt({ x: lerp(fr.x0, W, 0.45) + 8, y: lerp(yG, fr.yR, 0.45) - 10, class: 'lb-sm halo', fill: '#8A3A28', transform: `rotate(${fr.ang} ${lerp(fr.x0, W, 0.45) + 8} ${lerp(yG, fr.yR, 0.45) - 10})` }, '전선면 (온난 전선)', S0);
-      txt({ x: W * 0.08, y: g.top + 24, class: 'lb-sm halo', fill: '#8A3A28' }, '따뜻한 공기 ↗ (전선면을 타고 올라감)', S0);
-      txt({ x: W - 8, y: fr.yR + (yG - fr.yR) * 0.5, 'text-anchor': 'end', class: 'lb-sm halo', fill: '#1F5A88' }, '찬 공기층', S0);
-      s('rect', { x: 0, y: yG, width: W, height: g.H - yG, fill: '#9DB08F' }, S0);
-      cloudShape(S0, { x0: fr.x0 + 20, y0: g.top + 30, x1: W, y1: fr.yR - 4 + 30 }, c => {
-        c.rect(fr.x0 + 60, g.top + 46, W - fr.x0 - 60, Math.max(8, fr.yR - g.top - 70), 14);
-        for (let i = 0; i < 8; i++) c.circle(fr.x0 + 70 + (W - fr.x0 - 80) * i / 7, g.top + 48, 18 + (i % 3) * 5);
-      }, 0.92);
+  /** 능선: x0~x1 사이 봉우리가 여러 개인 산줄기 (아래는 bottom까지 채움) */
+  function ridge(parent, x0, x1, yBase, amp, seed, fill, bottom, n) {
+    const R = rng(seed), pts = [];
+    n = n || 9;
+    for (let i = 0; i <= n; i++) pts.push([lerp(x0, x1, i / n), yBase - amp * (0.35 + 0.65 * R())]);
+    return s('path', { d: smoothLine(pts) + ` L${x1} ${bottom} L${x0} ${bottom} Z`, fill }, parent);
+  }
+  function pine(parent, x, yb, hgt, fill, trunk) {
+    const w = hgt * 0.42;
+    s('rect', { x: x - hgt * 0.04, y: yb - hgt * 0.18, width: hgt * 0.08, height: hgt * 0.18, fill: trunk || '#5A4632' }, parent);
+    for (let k = 0; k < 3; k++) {
+      const y0 = yb - hgt * (0.12 + k * 0.26), y1 = y0 - hgt * 0.42, ww = w * (1 - k * 0.22);
+      s('path', { d: `M${x - ww} ${y0} L${x} ${y1} L${x + ww} ${y0} Z`, fill }, parent);
     }
   }
-  /* 장면에서 공기가 지나가는 가로 위치 (이동하는 안개) */
-  function X(kind, x) {
-    const W = sh.frame.sceneW;
-    if (kind === 'advection') return W * 0.05 + x * W * 0.76;
-    if (kind === 'steam') return W * 0.05 + x * W * 0.82;
-    return W * 0.5;
+  function roundTree(parent, x, yb, hgt, fill) {
+    s('rect', { x: x - hgt * 0.05, y: yb - hgt * 0.42, width: hgt * 0.1, height: hgt * 0.42, fill: '#6A5236' }, parent);
+    s('circle', { cx: x, cy: yb - hgt * 0.66, r: hgt * 0.32, fill }, parent);
+    s('circle', { cx: x - hgt * 0.18, cy: yb - hgt * 0.54, r: hgt * 0.22, fill }, parent);
+    s('circle', { cx: x + hgt * 0.18, cy: yb - hgt * 0.56, r: hgt * 0.22, fill }, parent);
   }
-  function slopeGeo(g) {
-    const zTop = Math.max(1.0, st.M + 0.35);
-    return { x0: g.W * 0.22, x1: g.W * 0.84, zTop, yZ: z => g.yG - z / zTop * (g.yG - g.top - 34) };
+  function bareTree(parent, x, yb, hgt, color) {
+    const st2 = { stroke: color, 'stroke-linecap': 'round', fill: 'none' };
+    s('path', Object.assign({ d: `M${x} ${yb} L${x} ${yb - hgt}`, 'stroke-width': hgt * 0.07 }, st2), parent);
+    [[0.45, -1], [0.6, 1], [0.75, -1], [0.85, 1]].forEach(([t, d]) => s('path', Object.assign({ d: `M${x} ${yb - hgt * t} l${d * hgt * 0.28} ${-hgt * 0.22}`, 'stroke-width': hgt * 0.035 }, st2), parent));
   }
-  function frontGeo(g) {
-    const x0 = g.W * 0.12, yR = g.yG - (g.yG - g.top) * 0.55;
-    return { x0, yR, ang: Math.atan2(yR - g.yG, g.W - x0) * 180 / Math.PI };
+  function house(parent, x, yb, w, hgt, wall, roof, lit) {
+    s('rect', { x: x - w / 2, y: yb - hgt, width: w, height: hgt, fill: wall }, parent);
+    s('path', { d: `M${x - w / 2 - 3} ${yb - hgt} L${x} ${yb - hgt - w * 0.42} L${x + w / 2 + 3} ${yb - hgt} Z`, fill: roof }, parent);
+    s('rect', { x: x - w * 0.22, y: yb - hgt * 0.68, width: w * 0.2, height: hgt * 0.3, fill: lit ? '#FFD98A' : '#8FA9BF' }, parent);
+    s('rect', { x: x + w * 0.08, y: yb - hgt * 0.68, width: w * 0.2, height: hgt * 0.3, fill: lit ? '#FFD98A' : '#8FA9BF' }, parent);
   }
-  /** 안개 띠: 정해진 칸마다 같은 모양(자라도 모양이 튀지 않게) */
-  function fogBand(parent, x0, x1, yb, hgt, dens, seed) {
-    if (dens <= 0.01 || x1 - x0 < 3 || hgt < 2) return;
-    const grp = s('g', { opacity: clamp(dens, 0, 1).toFixed(2) }, parent);
-    s('rect', { x: x0, y: yb - hgt * 0.7, width: x1 - x0, height: hgt * 0.7, fill: '#F7FAFC', opacity: 0.6, rx: Math.min(hgt * 0.3, 12) }, grp);
-    const STEP = 24;
+  function building(parent, x, yb, w, hgt, fill) {
+    s('rect', { x, y: yb - hgt, width: w, height: hgt, fill }, parent);
+    for (let yy = yb - hgt + 7; yy < yb - 8; yy += 10) for (let xx = x + 5; xx < x + w - 5; xx += 9) s('rect', { x: xx, y: yy, width: 4, height: 5, fill: '#DCE7EF', opacity: 0.85 }, parent);
+  }
+  /** 부드러운 안개 띠 (흐림 효과) */
+  function mist(parent, x0, x1, yb, hgt, dens, seed) {
+    if (dens <= 0.01 || x1 - x0 < 4 || hgt < 3) return;
+    const grp = s('g', { opacity: clamp(dens, 0, 1).toFixed(2), filter: 'url(#fogBlur)' }, parent);
+    s('rect', { x: x0, y: yb - hgt * 0.55, width: x1 - x0, height: hgt * 0.55 + 6, fill: '#F6F9FB', opacity: 0.9, rx: 10 }, grp);
+    const STEP = 30;
     for (let i = Math.floor(x0 / STEP); i * STEP <= x1; i++) {
-      const R = rng(seed * 977 + i * 131), cx = i * STEP + R() * 10;
-      if (cx < x0 - 6 || cx > x1 + 6) continue;
-      s('ellipse', { cx, cy: yb - hgt * (0.45 + R() * 0.3), rx: 20 + R() * 16, ry: Math.max(3, hgt * (0.32 + R() * 0.22)), fill: '#FFFFFF', opacity: 0.55 }, grp);
+      const R = rng(seed * 977 + i * 131), cx = i * STEP + R() * 12;
+      if (cx < x0 + 4 || cx > x1 - 4) continue;
+      s('ellipse', { cx, cy: yb - hgt * (0.5 + R() * 0.25), rx: 24 + R() * 18, ry: Math.max(4, hgt * (0.28 + R() * 0.2)), fill: '#FFFFFF', opacity: 0.85 }, grp);
     }
   }
   /** 위로 올라가는 물결 화살표 (복사 · 증발) */
   function wavyUp(parent, x, y0, len, color, phase, width) {
     const n = 14, pts = [];
     for (let i = 0; i <= n; i++) { const t = i / n; pts.push([x + Math.sin(t * Math.PI * 3 + phase) * 4, y0 - t * len]); }
-    s('path', { d: 'M' + pts.map(p => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' L'), fill: 'none', stroke: color, 'stroke-width': width || 2.2, 'stroke-linecap': 'round' }, parent);
+    s('path', { d: P2(pts), fill: 'none', stroke: color, 'stroke-width': width || 2.2, 'stroke-linecap': 'round' }, parent);
     const e = pts[n];
     s('path', { d: `M${e[0] - 5} ${e[1] + 6} L${e[0]} ${e[1]} L${e[0] + 5} ${e[1] + 6}`, fill: 'none', stroke: color, 'stroke-width': width || 2.2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, parent);
   }
-  function arrowH(parent, x0, x1, y, color, w) {
-    s('path', { d: `M${x0} ${y} L${x1} ${y} M${x1 - 9} ${y - 6} L${x1} ${y} L${x1 - 9} ${y + 6}`, fill: 'none', stroke: color, 'stroke-width': w || 3, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, parent);
+  /** 곧은 화살표: 끝(x1, y1)에 진행 방향을 향한 머리 */
+  function arrowLine(parent, x0, y0, x1, y1, color, w, dash) {
+    const ang = Math.atan2(y1 - y0, x1 - x0), hl = 6 + (w || 3) * 1.6;
+    s('path', { d: `M${x0} ${y0} L${x1 - Math.cos(ang) * 2} ${y1 - Math.sin(ang) * 2}`, fill: 'none', stroke: color, 'stroke-width': w || 3, 'stroke-linecap': 'round', 'stroke-dasharray': dash || 'none' }, parent);
+    const a1 = ang + Math.PI * 0.82, a2 = ang - Math.PI * 0.82;
+    s('path', { d: `M${x1 + Math.cos(a1) * hl} ${y1 + Math.sin(a1) * hl} L${x1} ${y1} L${x1 + Math.cos(a2) * hl} ${y1 + Math.sin(a2) * hl} Z`, fill: color, stroke: color, 'stroke-width': 1, 'stroke-linejoin': 'round' }, parent);
+  }
+  /** 곡선 화살표 (바람 · 기류): 점들을 지나는 곡선 + 끝 방향 머리 */
+  function curveArrow(parent, pts, color, w, opacity) {
+    const g2 = s('g', { opacity: opacity == null ? 1 : opacity }, parent);
+    s('path', { d: smoothLine(pts), fill: 'none', stroke: color, 'stroke-width': w, 'stroke-linecap': 'round' }, g2);
+    const a = pts[pts.length - 2], b2 = pts[pts.length - 1], ang = Math.atan2(b2[1] - a[1], b2[0] - a[0]), hl = 6 + w * 1.6;
+    s('path', { d: `M${b2[0] + Math.cos(ang + 2.6) * hl} ${b2[1] + Math.sin(ang + 2.6) * hl} L${b2[0]} ${b2[1]} L${b2[0] + Math.cos(ang - 2.6) * hl} ${b2[1] + Math.sin(ang - 2.6) * hl} Z`, fill: color }, g2);
+  }
+  /** 이름표(글자 테두리 있음) */
+  const lbl = (parent, x, y, text, fill, o) => txt(Object.assign({ x, y, class: 'lb-sm halo', fill }, o || {}), text, parent);
+  function waves(parent, x0, x1, y, color, phase, gap) {
+    for (let x = x0 + ((phase * 12) % 34); x < x1 - 10; x += gap || 34) s('path', { d: `M${x} ${y} q5 -4 10 0 t10 0`, fill: 'none', stroke: color, 'stroke-width': 1.6, 'stroke-linecap': 'round', opacity: 0.7 }, parent);
   }
   const mixColor = (a, b, t) => { const p = x => [1, 3, 5].map(i => parseInt(x.slice(i, i + 2), 16)); const A1 = p(a), B1 = p(b); return '#' + A1.map((v, i) => Math.round(lerp(v, B1[i], t)).toString(16).padStart(2, '0')).join(''); };
   function hourText(s0) {
@@ -357,6 +346,268 @@ const FogLab = (function () {
     const h12 = h2 > 12 ? h2 - 12 : (h2 === 0 ? 12 : h2);
     return `${part} ${h12}시${m2 ? ' ' + m2 + '분' : ''}`;
   }
+  /* 장면에서 공기가 지나가는 가로 위치 (이동하는 안개) */
+  function X(kind, x) {
+    const W = sh.frame.sceneW;
+    if (kind === 'advection') return W * 0.05 + x * W * 0.72;
+    if (kind === 'steam') return W * 0.05 + x * W * 0.82;
+    return W * 0.5;
+  }
+  function slopeGeo(g) {
+    const zTop = Math.max(1.0, st.M + 0.35);
+    return { x0: g.W * 0.24, x1: g.W * 0.82, zTop, yZ: z => g.yG - z / zTop * (g.yG - g.top - 34) };
+  }
+  function frontGeo(g) {
+    const x0 = g.W * 0.08, yR = g.yG - (g.yG - g.top) * 0.6;
+    return { x0, yR, yAt: x => lerp(g.yG, yR, (x - x0) / (g.W - x0)), ang: Math.atan2(yR - g.yG, g.W - x0) * 180 / Math.PI };
+  }
+  // 복사 안개 골짜기 모양: 양쪽 언덕 사이 평평한 바닥
+  const valley = g => ({ l: g.W * 0.3, r: g.W * 0.7, hl: x => g.yG - Math.max(0, (g.W * 0.3 - x) / (g.W * 0.3)) * 125, hr: x => g.yG - Math.max(0, (x - g.W * 0.7) / (g.W * 0.3)) * 115 });
+
+  function buildScene(f) {
+    const svg = sh.sceneSvg; clear(svg);
+    const g = sceneGeo(f), W = g.W, yG = g.yG;
+    const defs = s('defs', null, svg);
+    E.skyG = s('linearGradient', { id: 'fogsky', x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
+    E.sky0 = s('stop', { offset: '0%' }, E.skyG); E.sky1 = s('stop', { offset: '100%' }, E.skyG);
+    const blur = s('filter', { id: 'fogBlur', x: '-30%', y: '-80%', width: '160%', height: '260%' }, defs);
+    s('feGaussianBlur', { stdDeviation: 5 }, blur);
+    const glow = s('radialGradient', { id: 'fogSun' }, defs);
+    [['0%', '#FFF6D8', 1], ['45%', '#FFE2A0', 0.8], ['100%', '#FFD08A', 0]].forEach(([o, c, op]) => s('stop', { offset: o, 'stop-color': c, 'stop-opacity': op }, glow));
+    s('rect', { x: 0, y: 0, width: W, height: g.H, fill: 'url(#fogsky)' }, svg);
+    E.back = s('g', null, svg);      // 하늘: 별 · 달 · 해 · 구름 (매 순간)
+    E.stat = s('g', null, svg);      // 풍경 (조건이 바뀔 때만)
+    E.dyn = s('g', null, svg);       // 화살표 · 빗방울 · 물결 (매 순간)
+    E.fog = s('g', null, svg);       // 안개 (매 순간)
+    E.top = s('g', null, svg);       // 안개 위에 보여야 할 이름표 (매 순간)
+    E.parcel = makeParcel(svg, { seed: 23 });
+    E.tag = s('g', null, svg);
+    E.tagBg = s('rect', { rx: 8, fill: '#fff', stroke: '#C9C4B8', opacity: 0.96 }, E.tag);
+    E.tagT = txt({ class: 'lb-sm tnum', fill: 'var(--temp)' }, '', E.tag);
+    E.tagD = txt({ class: 'lb-sm tnum', fill: 'var(--dew)' }, '', E.tag);
+    E.clock = s('g', null, svg);
+    E.clockBg = s('rect', { x: 10, y: 24, rx: 9, height: 28, fill: 'rgba(20,30,50,.55)' }, E.clock);
+    E.clockT = txt({ x: 22, y: 43, class: 'lb', fill: '#F4F6FA' }, '', E.clock);
+    const S0 = E.stat;
+    if (st.kind === 'radiation') {
+      const v = valley(g);
+      ridge(S0, -10, W + 10, yG - 150, 70, 4, '#25345A', g.H, 8);               // 먼 산
+      ridge(S0, -10, W + 10, yG - 105, 40, 9, '#2C3F5E', g.H, 10);
+      const hillL = [], hillR = [];
+      for (let x = 0; x <= v.l + 1; x += v.l / 12) hillL.push([x, v.hl(x)]);
+      for (let x = v.r; x <= W + 1; x += (W - v.r) / 12) hillR.push([x, v.hr(x)]);
+      s('path', { d: P2([[0, g.H], ...hillL, [v.l, yG], [v.r, yG], ...hillR, [W, g.H]]) + ' Z', fill: '#2E4636' }, S0);
+      s('rect', { x: 0, y: yG, width: W, height: g.H - yG, fill: '#33503C' }, S0);
+      s('path', { d: `M${v.l + 10} ${yG + 30} C${W * 0.42} ${yG + 6} ${W * 0.56} ${yG + 44} ${v.r - 6} ${yG + 18}`, fill: 'none', stroke: '#5B6B78', 'stroke-width': 6, opacity: 0.7 }, S0);   // 길
+      [[0.05, 0.6], [0.1, 0.7], [0.16, 0.8], [0.22, 0.75], [0.84, 0.75], [0.9, 0.7], [0.95, 0.62]].forEach(([t, k]) => { const x = W * t; pine(S0, x, x < W / 2 ? v.hl(x) + 2 : v.hr(x) + 2, 36 * k, '#1D3326', '#2A2A22'); });
+      [[0.37, 22, 16], [0.44, 26, 18], [0.6, 24, 17], [0.66, 20, 15]].forEach(([t, w, hh]) => house(S0, W * t, yG + 2, w, hh, '#3A4658', '#24303F', true));
+      lbl(S0, W * 0.5, yG + 46, '분지 · 골짜기', '#DDE7DA', { 'text-anchor': 'middle', class: 'lb-sm', stroke: 'none' });
+    } else if (st.kind === 'advection') {
+      const xs = X('advection', 0.35), xc = W * 0.8;
+      const sea = s('linearGradient', { id: 'fogsea', x1: 0, y1: 0, x2: 1, y2: 0 }, defs);
+      [['0%', '#3FA39A'], [(xs / W * 100).toFixed(0) + '%', '#3E9C98'], [((xs / W + 0.14) * 100).toFixed(0) + '%', '#2A6A9C'], ['100%', '#1F5786']].forEach(([o, c]) => s('stop', { offset: o, 'stop-color': c }, sea));
+      ridge(S0, xc - 40, W + 10, yG - 70, 40, 3, '#8BA48A', yG, 5);                // 해안 뒤 언덕
+      [[0.82, 16, 70, '#C8D2DA'], [0.855, 18, 92, '#B7C3CD'], [0.895, 15, 60, '#D3DBE1'], [0.925, 20, 104, '#AFBCC7'], [0.965, 16, 76, '#C2CDD6']].forEach(([t, w, hh, c]) => building(S0, W * t, yG - 10, w, hh, c));
+      s('path', { d: `M${xc - 6} ${yG} Q${xc + 20} ${yG - 12} ${W} ${yG - 12} L${W} ${g.H} L${xc - 6} ${g.H} Z`, fill: '#E2CFA2' }, S0);   // 모래사장
+      s('rect', { x: 0, y: yG, width: xc, height: g.H - yG, fill: 'url(#fogsea)' }, S0);
+      lbl(S0, xs / 2, yG + 26, '따뜻한 바다', '#FFFFFF', { 'text-anchor': 'middle', class: 'lb-sm', stroke: 'none' });
+      lbl(S0, (xs + xc) / 2, yG + 26, `차가운 해수면 ${fT(st.sea)} ℃`, '#FFFFFF', { 'text-anchor': 'middle', class: 'lb-sm tnum', stroke: 'none' });
+      lbl(S0, (xc + W) / 2 + 4, yG + 26, '해안', '#6B5528', { 'text-anchor': 'middle', class: 'lb-sm', stroke: 'none' });
+    } else if (st.kind === 'upslope') {
+      const geo = slopeGeo(g);
+      ridge(S0, -10, W + 10, yG - (yG - g.top) * 0.62, 50, 6, '#B8C8D6', g.H, 7);     // 먼 산줄기
+      const peak = [geo.x1, geo.yZ(st.M)];
+      s('path', { d: P2([[0, g.H], [0, yG], [geo.x0, yG], peak, [W, lerp(peak[1], yG, 0.75)], [W, g.H]]) + ' Z', fill: '#6F9061' }, S0);
+      s('path', { d: P2([[geo.x0, yG], peak, [peak[0] - 18, peak[1] + 30], [geo.x0 + 40, yG]]) + ' Z', fill: '#7FA06E', opacity: 0.6 }, S0);   // 사면 밝은 쪽
+      for (let i = 1; i <= 9; i++) { const t = i / 10, x = lerp(geo.x0, geo.x1, t), y = lerp(yG, peak[1], t); pine(S0, x - 6, y + 4, 22 + 8 * (1 - t), '#2F5A35'); }
+      for (let i = 0; i < 4; i++) roundTree(S0, W * (0.03 + 0.05 * i), yG + 2, 26, '#4F7A45');
+      house(S0, W * 0.2, yG + 1, 22, 15, '#E8DCC8', '#A3553E', false);
+      for (let z = 0.5; z <= geo.zTop + 1e-9; z += 0.5) {
+        s('line', { x1: 0, x2: W, y1: geo.yZ(z), y2: geo.yZ(z), stroke: '#fff', 'stroke-width': 1, opacity: 0.5, 'stroke-dasharray': '3 5' }, S0);
+        lbl(S0, 8, geo.yZ(z) - 5, `${fmt(z, 1)} km`, '#485563', { class: 'lb-sm tnum halo-sky' });
+      }
+      const H = A(1).H;
+      if (H <= geo.zTop) {
+        s('line', { x1: 0, x2: W, y1: geo.yZ(H), y2: geo.yZ(H), stroke: 'var(--lcl)', 'stroke-width': 2, 'stroke-dasharray': '12 5 3 5' }, S0);
+        lbl(S0, 8, geo.yZ(H) + 18, `상승 응결 고도 ${fZ(H)} km`, '#7A4E10', { class: 'lb-sm halo-sky' });
+      }
+    } else if (st.kind === 'steam') {
+      const xw = X('steam', 0.3);
+      ridge(S0, -10, W + 10, yG - 52, 22, 8, '#7D8E86', g.H, 12);                   // 건너편 숲
+      for (let i = 0; i < 14; i++) pine(S0, xw + 10 + (W - xw) * i / 14, yG - 30 + (i % 3) * 3, 18 + (i % 4) * 3, '#5F7268');
+      s('path', { d: P2([[0, g.H], [0, yG - 8], [xw * 0.6, yG - 4], [xw + 6, yG], [xw + 6, g.H]]) + ' Z', fill: '#E4EAEE' }, S0);   // 서리 내린 땅
+      const lake = s('linearGradient', { id: 'foglake', x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
+      [['0%', '#4B93B4'], ['100%', '#2E6F92']].forEach(([o, c]) => s('stop', { offset: o, 'stop-color': c }, lake));
+      s('rect', { x: xw, y: yG, width: W - xw, height: g.H - yG, fill: 'url(#foglake)' }, S0);
+      for (let i = 0; i < 5; i++) s('line', { x1: xw + 30 + i * (W - xw) / 5, x2: xw + 70 + i * (W - xw) / 5, y1: yG + 14 + (i % 2) * 14, y2: yG + 14 + (i % 2) * 14, stroke: '#9CCBE0', 'stroke-width': 2, opacity: 0.6 }, S0);
+      [[0.06, 40], [0.15, 32], [0.24, 36]].forEach(([t, hh]) => bareTree(S0, W * t, yG - 6, hh, '#6B6258'));
+      s('path', { d: `M${xw + 4} ${yG - 3} L${xw + 70} ${yG - 3}`, stroke: '#8A6B4A', 'stroke-width': 5 }, S0);      // 선착장
+      [xw + 14, xw + 40, xw + 64].forEach(x => s('line', { x1: x, x2: x, y1: yG - 3, y2: yG + 14, stroke: '#6E5338', 'stroke-width': 3 }, S0));
+      lbl(S0, xw / 2, yG + 26, '차가운 육지 (서리)', '#4E5D6A', { 'text-anchor': 'middle', class: 'lb-sm', stroke: 'none' });
+      lbl(S0, (xw + W) / 2, yG + 30, `따뜻한 수면 ${fT(st.water)} ℃ (호수 · 강)`, '#FFFFFF', { 'text-anchor': 'middle', class: 'lb-sm tnum', stroke: 'none' });
+    } else {   // frontal
+      const fr = frontGeo(g);
+      s('path', { d: P2([[0, g.top - 20], [W, g.top - 20], [W, fr.yR], [fr.x0, yG], [0, yG]]) + ' Z', fill: '#F4DCC8', opacity: 0.55 }, S0);   // 따뜻한 공기
+      s('path', { d: P2([[fr.x0, yG], [W, fr.yR], [W, yG]]) + ' Z', fill: '#C6DAEC', opacity: 0.85 }, S0);                                       // 찬 공기
+      const cx0 = W * 0.34;
+      cloudShape(S0, { x0: cx0 - 20, y0: g.top - 10, x1: W + 10, y1: fr.yR + 20 }, c => {
+        c.rect(cx0, g.top + 30, W - cx0 + 10, Math.max(10, fr.yR - g.top - 46), 16);
+        for (let i = 0; i < 8; i++) c.circle(cx0 + 10 + (W - cx0) * i / 7, g.top + 30, 20 + (i % 3) * 6);
+      }, 0.95);
+      lbl(S0, cx0 + 20, g.top + 64, '비구름 (난층운)', '#55606A', { class: 'lb-sm' });
+      s('line', { x1: fr.x0, y1: yG, x2: W, y2: fr.yR, stroke: '#B0513A', 'stroke-width': 3.5 }, S0);
+      for (let i = 1; i <= 5; i++) { const t = i / 6, x = lerp(fr.x0, W, t), y = lerp(yG, fr.yR, t); s('circle', { cx: x, cy: y, r: 6.5, fill: '#B0513A' }, S0); }
+      const lx = lerp(fr.x0, W, 0.3), ly = fr.yAt(lx) - 12;
+      lbl(S0, lx, ly, '전선면 (온난 전선)', '#8A3A28', { transform: `rotate(${fr.ang} ${lx} ${ly})` });
+      s('rect', { x: 0, y: yG, width: W, height: g.H - yG, fill: '#8FA582' }, S0);
+      [[0.5, 22, 16, '#E9E1D2', '#9C5A44'], [0.58, 26, 18, '#DDD3C1', '#7F4B3B'], [0.86, 24, 17, '#E6DCCB', '#9C5A44']].forEach(([t, w, hh, c1, c2]) => house(S0, W * t, yG + 1, w, hh, c1, c2, false));
+      [0.66, 0.74, 0.95].forEach(t => roundTree(S0, W * t, yG + 2, 30, '#56794A'));
+      lbl(S0, W - 8, fr.yR + (yG - fr.yR) * 0.42, '찬 공기층', '#1F5A88', { 'text-anchor': 'end' });
+    }
+  }
+
+  /* 안개마다 매 순간 그리는 부분: 공기 위치 { px, py, r, info }를 돌려줌 */
+  const SCENE = {
+    radiation(g, a, on, dens, ph) {
+      const W = g.W, yG = g.yG, v = valley(g);
+      const dawn = clamp((st.s - 0.8) / 0.2, 0, 1), cloudy = st.sky !== 'clear';
+      sa(E.sky0, { 'stop-color': mixColor(cloudy ? '#232C3C' : '#111B33', '#56688F', dawn) }); sa(E.sky1, { 'stop-color': mixColor(cloudy ? '#3A4556' : '#2C3F66', '#F0C79E', dawn) });
+      if (dawn > 0) s('circle', { cx: W * 0.82, cy: yG - 150, r: 70, fill: 'url(#fogSun)', opacity: dawn * 0.9 }, E.back);
+      if (!cloudy) {
+        const R = rng(5);
+        for (let i = 0; i < 40; i++) { const tw = 0.6 + 0.4 * Math.sin(ph * 0.6 + i * 1.7); s('circle', { cx: R() * W, cy: g.top + R() * (yG - g.top) * 0.5, r: 0.7 + R() * 1.2, fill: '#fff', opacity: (0.45 + R() * 0.55) * tw * (1 - dawn) }, E.back); }
+        s('circle', { cx: W * 0.16, cy: g.top + 40, r: 16, fill: '#F2EFD8', opacity: 0.95 - 0.7 * dawn }, E.back);
+        s('circle', { cx: W * 0.16 + 6, cy: g.top + 36, r: 14, fill: mixColor('#111B33', '#56688F', dawn), opacity: 0.95 - 0.7 * dawn }, E.back);   // 초승달
+      } else {
+        cloudShape(E.back, { x0: -20, y0: g.top - 20, x1: W + 20, y1: g.top + 74 }, c => { c.rect(-20, g.top + 24, W + 40, 40, 16); for (let i = 0; i <= 9; i++) c.circle(W * i / 9, g.top + 26, 24 + (i % 3) * 7); }, 0.9);
+      }
+      // 지표 복사: 맑으면 우주로 빠져나가고, 흐리면 구름이 다시 지표로 돌려보냄
+      const xs = [0.12, 0.27, 0.42, 0.58, 0.73, 0.88];
+      xs.forEach((t, i) => {
+        const x = W * t, y0 = (x < v.l ? v.hl(x) : x > v.r ? v.hr(x) : yG) - 8;
+        const len = cloudy ? Math.max(30, y0 - g.top - 76) : (y0 - g.top) * 0.55;
+        wavyUp(E.dyn, x, y0, len, '#F08A55', ph * 0.8 + i, 2.3);
+        if (cloudy) arrowLine(E.dyn, x + 14, g.top + 74, x + 14, g.top + 112, '#F0A67E', 2, '4 3');
+      });
+      lbl(E.dyn, W * 0.5, g.top + (cloudy ? 92 : 70), cloudy ? '구름이 지표에서 나온 열을 다시 돌려보내요 → 덜 식어요' : '맑은 밤: 지표의 열이 우주로 빠져나가요 (복사 냉각)', cloudy ? '#FFD9C2' : '#FFC9A8', { 'text-anchor': 'middle', class: 'lb-sm', stroke: 'rgba(17,27,51,.85)', 'stroke-width': 4, 'paint-order': 'stroke' });
+      // 식은 공기가 산비탈을 따라 골짜기로 흘러내려 고임
+      const cool = clamp(st.s / 0.6, 0, 1);
+      if (cool > 0.05) {
+        [[0.06, 0.24], [0.94, 0.76]].forEach(([t0, t1], i) => {
+          const pts = []; for (let k = 0; k <= 4; k++) { const x = W * lerp(t0, t1, k / 4); pts.push([x, (x < v.l ? v.hl(x) : x > v.r ? v.hr(x) : yG) - 16]); }
+          curveArrow(E.dyn, pts, '#9CC8EE', 2.6, 0.5 + 0.5 * cool);
+          if (i === 0) lbl(E.dyn, W * 0.03, v.hl(W * 0.05) - 34, '식은 공기가 골짜기로', '#CFE6FA', { class: 'lb-sm', stroke: 'rgba(17,27,51,.85)', 'stroke-width': 4, 'paint-order': 'stroke' });
+        });
+        s('path', { d: P2([[W * 0.18, yG - 4 - 10 * cool], [v.l, yG - 22 * cool - 6], [v.r, yG - 22 * cool - 6], [W * 0.82, yG - 4 - 10 * cool], [W * 0.82, yG + 4], [W * 0.18, yG + 4]]) + ' Z', fill: '#8FB8E8', opacity: 0.18 * cool, filter: 'url(#fogBlur)' }, E.dyn);
+      }
+      if (st.wind === 'windy') {
+        for (let i = 0; i < 3; i++) { const cx = ((ph * 9 + i * 160) % (W + 160)) - 80, cy = yG - 50 - i * 24; curveArrow(E.dyn, [[cx - 40, cy + 8], [cx - 10, cy - 10], [cx + 20, cy + 6], [cx + 46, cy - 6]], '#E3ECF6', 2.6, 0.85); }
+        lbl(E.dyn, W * 0.5, yG - 126, '바람이 찬 공기를 위쪽 공기와 섞어요 → 덜 식어요', '#E3ECF6', { 'text-anchor': 'middle', stroke: 'rgba(17,27,51,.85)', 'stroke-width': 4, 'paint-order': 'stroke' });
+      }
+      if (dens > 0) {
+        mist(E.fog, W * 0.14, W * 0.86, yG + 8, 26 + 70 * dens, dens, 3);
+        mist(E.fog, W * 0.26, W * 0.74, yG + 4, 16 + 40 * dens, dens * 0.9, 5);
+      }
+      return { px: W * 0.5, py: yG - 26, r: 15, info: hourText(st.s), fl: dens > 0 ? { x: W * 0.5, y: yG - 34 - 64 * dens, t: '골짜기에 낀 복사 안개' } : null };
+    },
+    advection(g, a, on, dens, ph) {
+      const W = g.W, yG = g.yG, xc = W * 0.8;
+      sa(E.sky0, { 'stop-color': '#9DCBEA' }); sa(E.sky1, { 'stop-color': '#E8F3FA' });
+      s('circle', { cx: W * 0.1, cy: g.top + 40, r: 42, fill: 'url(#fogSun)', opacity: 0.9 }, E.back);
+      s('circle', { cx: W * 0.1, cy: g.top + 40, r: 15, fill: '#FFF3C4' }, E.back);
+      [[0.42, 46, 30], [0.7, 30, 22]].forEach(([t, y, r]) => { const cx = W * t + Math.sin(ph * 0.05) * 6; cloudShape(E.back, { x0: cx - r * 2.2, y0: g.top + y - r, x1: cx + r * 2.2, y1: g.top + y + r * 0.6 }, c => { c.rect(cx - r * 1.8, g.top + y - r * 0.2, r * 3.6, r * 0.8, r * 0.4); c.circle(cx - r * 0.8, g.top + y, r * 0.7); c.circle(cx + r * 0.3, g.top + y - r * 0.3, r); c.circle(cx + r * 1.2, g.top + y + 2, r * 0.6); }, 0.95); });
+      waves(E.dyn, 6, xc - 6, yG + 10, '#E8F6F5', ph, 40); waves(E.dyn, 26, xc - 6, yG + 40, '#DDEFF5', ph * 0.8, 46);
+      const px = X('advection', a.x), py = yG - 30;
+      // 남쪽 따뜻한 바다에서 불어오는 온난 습윤한 공기
+      const wy = yG - 120;
+      curveArrow(E.dyn, [[W * 0.03, wy + 10], [W * 0.18, wy - 8], [W * 0.34, wy + 4], [W * 0.46, wy - 4]], '#D0563F', 5);
+      lbl(E.dyn, W * 0.03, wy - 22, '따뜻한 바다 위의 온난 습윤한 공기가 이동 →', '#9C3B2E');
+      for (let i = 0; i < 4; i++) s('path', { d: `M${W * 0.07 + i * 26} ${wy + 20} q4 7 0 10 q-4 -3 0 -10 Z`, fill: '#6AA9D8' }, E.dyn);
+      if (a.overCold) {
+        for (let i = -1; i <= 1; i++) arrowLine(E.dyn, px + i * 14, py + 18, px + i * 14, yG - 3, '#2F6E9E', 2);
+        lbl(E.dyn, px, yG + 50, '찬 해수면이 공기를 아래에서 식혀요', '#E4F0FA', { 'text-anchor': 'middle', class: 'lb-sm', stroke: 'rgba(31,87,134,.9)', 'stroke-width': 4, 'paint-order': 'stroke' });
+      }
+      let fl = null;
+      if (on != null && st.s >= on) {   // 찬 바다 위에서 생긴 안개가 바람을 따라 해안으로
+        const x0 = X('advection', on) - 10, x1 = Math.min(W + 20, px + 60 + (st.s - on) * W * 0.5);
+        mist(E.fog, x0, x1, yG + 6, 30 + 52 * dens, dens, 7);
+        mist(E.fog, x0 + 30, x1, yG + 4, 18 + 30 * dens, dens * 0.9, 8);
+        fl = { x: Math.min((x0 + x1) / 2, W * 0.7), y: yG - 40 - 50 * dens, t: '해안으로 밀려오는 이류 안개 (해무)' };
+      }
+      return { px, py, r: 15, info: a.overCold ? '차가운 해수면 위' : '따뜻한 바다 위', fl };
+    },
+    upslope(g, a, on, dens, ph) {
+      const W = g.W, yG = g.yG, geo = slopeGeo(g), peakY = geo.yZ(st.M);
+      sa(E.sky0, { 'stop-color': '#A9CDEA' }); sa(E.sky1, { 'stop-color': '#EAF4FA' });
+      const t = a.z / st.M, px = lerp(geo.x0, geo.x1, t), r = 13 + 7 * a.z / geo.zTop, py = geo.yZ(a.z) - r - 6;
+      // 바람이 산 사면을 따라 공기를 밀어 올림
+      for (let i = 0; i < 3; i++) {
+        const u = (ph * 0.02 + i / 3) % 1, x0 = lerp(geo.x0 - 60, geo.x1, u * 0.85), x1 = x0 + 70;
+        const yAt = x => (x < geo.x0 ? yG : lerp(yG, peakY, (x - geo.x0) / (geo.x1 - geo.x0))) - 30;
+        curveArrow(E.dyn, [[x0, yAt(x0)], [(x0 + x1) / 2, yAt((x0 + x1) / 2) - 4], [x1, yAt(x1)]], '#5E6F7E', 2.6, 0.8);
+      }
+      lbl(E.dyn, W * 0.03, yG - 44, '바람 →', '#4E5D6A');
+      lbl(E.top, W * 0.03, yG - 92, '산 사면을 따라 올라가며', '#33414E', { class: 'lb-sm halo-sky' });
+      lbl(E.top, W * 0.03, yG - 74, '단열 팽창 → 기온이 내려가요', '#33414E', { class: 'lb-sm halo-sky' });
+      if (a.saturated && a.z > a.H) {   // 응결 고도부터 공기가 지나온 곳까지 사면을 덮는 안개
+        const n = 8;
+        for (let i = 0; i < n; i++) {
+          const z0 = lerp(a.H, a.z, i / n), z1 = lerp(a.H, a.z, (i + 1) / n);
+          const xa = lerp(geo.x0, geo.x1, z0 / st.M), xb = lerp(geo.x0, geo.x1, z1 / st.M);
+          mist(E.fog, xa - 34, xb + 30, geo.yZ(z0) + 10, 46 + 40 * dens, dens, 11 + i);
+        }
+      }
+      const fl = a.saturated && a.z > a.H ? { x: lerp(geo.x0, geo.x1, (a.H + a.z) / 2 / st.M) - 60, y: geo.yZ((a.H + a.z) / 2) - 40 - 20 * dens, t: '사면을 덮은 활승 안개' } : null;
+      return { px, py, r, info: `높이 ${fZ(a.z)} km`, fl };
+    },
+    steam(g, a, on, dens, ph) {
+      const W = g.W, yG = g.yG, xw = X('steam', 0.3);
+      sa(E.sky0, { 'stop-color': '#C9D7E2' }); sa(E.sky1, { 'stop-color': '#F4EEE6' });
+      s('circle', { cx: W * 0.86, cy: yG - 70, r: 46, fill: 'url(#fogSun)', opacity: 0.8 }, E.back);
+      s('circle', { cx: W * 0.86, cy: yG - 70, r: 13, fill: '#FFF1D0', opacity: 0.95 }, E.back);
+      const px = X('steam', a.x), py = yG - 30;
+      for (let i = 0; i < 3; i++) { const x0 = ((ph * 7 + i * 90) % (xw + 120)) - 60, y = yG - 18 - i * 16; arrowLine(E.dyn, x0, y, x0 + 54, y, '#3A78AA', 2.6); }
+      lbl(E.dyn, 10, yG - 82, `찬 공기 ${fT(Physics.FOG.steam.T0)} ℃ →`, '#1F5A88');
+      const nEv = Math.max(3, Math.round((st.water - 2) / 2.5));
+      for (let i = 0; i < nEv; i++) { const x = xw + 24 + (W - xw - 40) * (i + 0.5) / nEv; wavyUp(E.dyn, x, yG - 2, 18 + st.water, '#7FB8D6', ph * 0.8 + i * 1.7, 1.8); }
+      lbl(E.top, (xw + W) / 2, yG + 50, '↑ 따뜻한 수면에서 수증기가 증발해 찬 공기 속으로', '#E8F4FA', { 'text-anchor': 'middle', class: 'lb-sm', stroke: 'rgba(31,87,134,.9)', 'stroke-width': 4, 'paint-order': 'stroke' });
+      let fl = null;
+      if (on != null && st.s >= on) {   // 김처럼 피어오르는 물안개
+        const x0 = X('steam', on), x1 = Math.min(W - 4, px + 40);
+        const grp = s('g', { filter: 'url(#fogBlur)', opacity: clamp(dens, 0, 1).toFixed(2) }, E.fog);
+        for (let x = x0; x < x1; x += 18) {
+          const R = rng(Math.round(x * 7)), hgt = (34 + 70 * dens) * (0.55 + R() * 0.6), sw = Math.sin(ph * 0.5 + x * 0.05) * 6;
+          s('path', { d: `M${x} ${yG} C${x - 12 + sw} ${yG - hgt * 0.35} ${x + 14 + sw} ${yG - hgt * 0.65} ${x + sw} ${yG - hgt}`, fill: 'none', stroke: '#FFFFFF', 'stroke-width': 10 + R() * 8, 'stroke-linecap': 'round', opacity: 0.85 }, grp);
+        }
+        mist(E.fog, x0 - 10, x1 + 10, yG + 6, 18 + 26 * dens, dens, 13);
+        fl = { x: (x0 + x1) / 2, y: yG - 74 - 60 * dens, t: '김처럼 피어오르는 증발 안개 (물안개)' };
+      }
+      return { px, py, r: 15, info: a.overWater ? '따뜻한 수면 위' : '차가운 육지 위', fl };
+    },
+    frontal(g, a, on, dens, ph) {
+      const W = g.W, yG = g.yG, fr = frontGeo(g);
+      sa(E.sky0, { 'stop-color': '#A8B2BC' }); sa(E.sky1, { 'stop-color': '#D8DEE3' });
+      // 따뜻한 공기가 전선면을 타고 올라감
+      curveArrow(E.dyn, [[W * 0.02, yG - 40], [W * 0.1, yG - 74], [W * 0.2, fr.yAt(W * 0.2) - 64], [W * 0.3, fr.yAt(W * 0.3) - 86]], '#D0563F', 4.5);
+      lbl(E.top, W * 0.02, g.top + 40, '따뜻한 공기가', '#9C3B2E');
+      lbl(E.top, W * 0.02, g.top + 58, '전선면을 타고 올라가요 ↗', '#9C3B2E');
+      // 빗방울: 구름에서 떨어져 찬 공기층을 지나며 증발해 작아짐
+      const R = rng(9), nDrop = st.rain === 'strong' ? 46 : 16;
+      for (let i = 0; i < nDrop; i++) {
+        const x = W * 0.36 + R() * (W * 0.62), yTop = Math.max(g.top + 60, fr.yR - 10), yBot = yG - 4;
+        const tt = (R() + st.s * 7) % 1, y = lerp(yTop, yBot, tt), yF = fr.yAt(x);
+        const inCold = y > yF, k = inCold ? clamp(1 - (y - yF) / Math.max(30, yBot - yF), 0.2, 1) : 1;
+        s('path', { d: `M${x} ${y} l-2.5 ${10 * k}`, stroke: '#3E6E9C', 'stroke-width': 2.2 * Math.sqrt(k), 'stroke-linecap': 'round', opacity: 0.9 }, E.dyn);
+        if (inCold && k < 0.5 && i % 3 === 0) s('circle', { cx: x + 3, cy: y - 4, r: 2.2, fill: 'none', stroke: '#8FB4D6', 'stroke-width': 1.2 }, E.dyn);
+      }
+      lbl(E.dyn, W - 8, fr.yR + (yG - fr.yR) * 0.42 + 20, '빗방울이 증발 → 수증기 증가', '#2F5E88', { 'text-anchor': 'end' });
+      if (dens > 0) {
+        mist(E.fog, fr.x0 + 50, W + 10, yG + 6, 24 + 46 * dens, dens, 17);
+        mist(E.fog, W * 0.34, W + 10, yG + 4, 14 + 28 * dens, dens * 0.9, 19);
+      }
+      return { px: W * 0.64, py: yG - 30, r: 15, info: '찬 공기층', fl: dens > 0 ? { x: W * 0.3, y: yG - 12, t: '찬 공기층에 낀 전선 안개' } : null };
+    }
+  };
 
   function buildGraph(f) {
     const svg = sh.graphSvg; clear(svg);
@@ -393,7 +644,6 @@ const FogLab = (function () {
     txt({ x: X1 - 10, y: Y0 - 12, 'text-anchor': 'end', class: 'lb-sm halo', fill: '#8D959C' }, '곡선 아래: 불포화', svg);
     E.cmpG = s('g', { opacity: 0.35 }, clipG);
     E.gGuide = s('g', null, svg);
-    E.gProc = s('g', null, svg);
     E.gPath = s('path', { fill: 'none', stroke: 'var(--temp)', 'stroke-width': 3.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, clipG);
     E.gStart = s('circle', { r: 5.5, fill: '#fff', stroke: 'var(--temp)', 'stroke-width': 2.5 }, svg);
     E.gPt = s('circle', { r: 8, fill: 'var(--temp)', stroke: '#fff', 'stroke-width': 2.5 }, svg);
@@ -408,6 +658,7 @@ const FogLab = (function () {
     ui.legend.innerHTML = legendHTML(C_SAT, '', '포화 수증기압') + legendHTML('var(--temp)', '', '공기의 변화') + (st.cmp ? legendHTML('#E3A99F', 'dash', '비교') : '');
   }
 
+  const bboxW = el => { try { return el.getBBox().width; } catch (e) { return 0; } };
   function render() {
     renderControls();
     if (!sh || !sh.frame || !G) return;
@@ -415,108 +666,27 @@ const FogLab = (function () {
     const a = A(), on = onset(), cool = group() === 'cool';
     const dens = a.saturated ? clamp(0.35 + a.water / 1.4, 0.35, 1) : 0;
     const ph = st.s * 40;                                   // 화살표 · 빗방울의 움직임 위상
-    clear(E.back); clear(E.dyn); clear(E.fog);
-    let px = W * 0.5, py = yG - 34, info = '';
+    clear(E.back); clear(E.dyn); clear(E.fog); clear(E.top);
 
     /* 장면 */
-    if (st.kind === 'radiation') {
-      const dawn = clamp((st.s - 0.8) / 0.2, 0, 1);
-      sa(E.sky0, { 'stop-color': mixColor('#16213A', '#5B6E96', dawn) }); sa(E.sky1, { 'stop-color': mixColor('#33476C', '#E9C9A6', dawn) });
-      if (st.sky === 'clear') {
-        const R = rng(5);
-        for (let i = 0; i < 26; i++) s('circle', { cx: R() * W, cy: g.top + R() * (yG - g.top) * 0.55, r: 0.8 + R() * 1.3, fill: '#fff', opacity: (0.5 + R() * 0.5) * (1 - dawn) }, E.back);
-        s('circle', { cx: W * 0.84, cy: g.top + 34, r: 15, fill: '#F4F1DC', opacity: 0.9 * (1 - dawn) + 0.2 }, E.back);
-      } else {
-        cloudShape(E.back, { x0: -10, y0: g.top - 10, x1: W + 10, y1: g.top + 64 }, c => { c.rect(-10, g.top + 18, W + 20, 40, 18); for (let i = 0; i < 9; i++) c.circle(W * i / 8, g.top + 22, 22 + (i % 3) * 6); }, 0.85);
-      }
-      // 지표 복사: 맑으면 우주로 빠져나감, 흐리면 구름이 다시 내보냄
-      const n = 4;
-      for (let i = 0; i < n; i++) {
-        const x = W * (0.14 + 0.24 * i);
-        const lenUp = st.sky === 'clear' ? (yG - g.top) * 0.42 : Math.max(20, yG - g.top - 110);
-        wavyUp(E.dyn, x, yG - 30, lenUp, '#E58A5C', ph + i, 2.2);
-        if (st.sky !== 'clear') { const y0 = g.top + 66; s('path', { d: `M${x + 18} ${y0} L${x + 18} ${y0 + 34} M${x + 13} ${y0 + 28} L${x + 18} ${y0 + 34} L${x + 23} ${y0 + 28}`, fill: 'none', stroke: '#E58A5C', 'stroke-width': 2, 'stroke-dasharray': '4 3' }, E.dyn); }
-      }
-      txt({ x: W * 0.14 + 12, y: yG - 30 - (st.sky === 'clear' ? (yG - g.top) * 0.42 : 60) + 14, class: 'lb-sm halo', fill: '#B65A2E' }, st.sky === 'clear' ? '지표면 복사 냉각 (열이 우주로 빠져나감)' : '구름이 복사 에너지를 다시 지표로', E.dyn);
-      if (st.wind === 'windy') for (let i = 0; i < 3; i++) { const y = yG - 70 - i * 26, x0 = ((ph * 6 + i * 70) % (W + 120)) - 100; arrowH(E.dyn, x0, x0 + 70, y, '#DDE6F0', 2.5); }
-      if (st.wind === 'windy') txt({ x: 12, y: yG - 128, class: 'lb-sm halo', fill: '#41536A' }, '바람이 지표 부근 공기를 섞음', E.dyn);
-      fogBand(E.fog, W * 0.02, W * 0.98, yG - 8, 18 + 46 * dens, dens, 3);
-      px = W * 0.5; py = yG - 34;
-      info = hourText(st.s);
-    } else if (st.kind === 'advection') {
-      sa(E.sky0, { 'stop-color': '#BFDDF2' }); sa(E.sky1, { 'stop-color': '#EEF6FB' });
-      px = X('advection', a.x); py = yG - 34;
-      arrowH(E.dyn, 14, 120, g.top + 40, '#C65040', 4);
-      txt({ x: 14, y: g.top + 26, class: 'lb-sm halo', fill: '#9C3B2E' }, '온난 습윤한 공기 이동', E.dyn);
-      if (a.overCold) for (let i = 0; i < 3; i++) { const x = px - 16 + i * 16; s('path', { d: `M${x} ${py + 20} L${x} ${yG - 2} M${x - 4} ${yG - 7} L${x} ${yG - 2} L${x + 4} ${yG - 7}`, fill: 'none', stroke: '#2F6E9E', 'stroke-width': 2 }, E.dyn); }
-      if (a.overCold) txt({ x: Math.max(px, W * 0.45), y: yG + 46, 'text-anchor': 'middle', class: 'lb-sm', fill: '#E4F0FA' }, '↓ 찬 해수면이 공기를 아래에서 냉각', E.dyn);
-      if (on != null && st.s >= on) fogBand(E.fog, X('advection', on), Math.min(W * 0.97, px + 40), yG, 26 + 40 * dens, dens, 7);
-      info = a.overCold ? '차가운 해수면 위' : '따뜻한 바다 위';
-    } else if (st.kind === 'upslope') {
-      sa(E.sky0, { 'stop-color': '#C4DFF2' }); sa(E.sky1, { 'stop-color': '#EEF6FB' });
-      const geo = slopeGeo(g);
-      px = lerp(geo.x0, geo.x1, a.z / st.M); py = geo.yZ(a.z) - 24;
-      arrowH(E.dyn, 14, geo.x0 - 10, yG - 22, '#4E5D6A', 3.5);
-      txt({ x: 14, y: yG - 34, class: 'lb-sm halo', fill: '#4E5D6A' }, '바람', E.dyn);
-      const ang = Math.atan2(geo.yZ(st.M) - yG, geo.x1 - geo.x0);
-      for (let i = 0; i < 3; i++) {
-        const t = ((ph * 0.03 + i / 3) % 1), x = lerp(geo.x0, geo.x1, t * 0.9), y = lerp(yG, geo.yZ(st.M), t * 0.9) - 46;
-        s('path', { d: `M${x} ${y} l${Math.cos(ang) * 26} ${Math.sin(ang) * 26}`, stroke: '#7A8894', 'stroke-width': 2.5, 'stroke-linecap': 'round', fill: 'none' }, E.dyn);
-      }
-      txt({ x: geo.x0 + 10, y: yG - 70, class: 'lb-sm halo', fill: '#4E5D6A' }, '산 사면을 따라 상승 → 단열 팽창 → 냉각', E.dyn);
-      if (a.saturated && a.z > a.H) {   // 응결 고도부터 공기가 지나온 곳까지 사면에 붙은 안개
-        const n = 10;
-        for (let i = 0; i < n; i++) {
-          const z0 = lerp(a.H, a.z, i / n), z1 = lerp(a.H, a.z, (i + 1) / n);
-          fogBand(E.fog, lerp(geo.x0, geo.x1, z0 / st.M) - 18, lerp(geo.x0, geo.x1, z1 / st.M) + 18, geo.yZ(z0) + 4, 30 + 26 * dens, dens, 11 + i);
-        }
-      }
-      info = `높이 ${fZ(a.z)} km`;
-    } else if (st.kind === 'steam') {
-      sa(E.sky0, { 'stop-color': '#D3E2EC' }); sa(E.sky1, { 'stop-color': '#F2F6F8' });
-      const xw = X('steam', 0.3);
-      px = X('steam', a.x); py = yG - 34;
-      arrowH(E.dyn, 14, 110, g.top + 40, '#2F6E9E', 4);
-      txt({ x: 14, y: g.top + 26, class: 'lb-sm halo', fill: '#1F5A88' }, `찬 공기 이동 (${fT(Physics.FOG.steam.T0)} ℃)`, E.dyn);
-      const nEv = Math.max(2, Math.round((st.water - 2) / 3));
-      for (let i = 0; i < nEv; i++) { const x = xw + 20 + (W - xw - 30) * (i + 0.5) / nEv; wavyUp(E.dyn, x, yG - 2, 26, '#8FC3DD', ph * 0.8 + i * 1.7, 1.8); }
-      txt({ x: (xw + W) / 2, y: yG - 118, 'text-anchor': 'middle', class: 'lb-sm halo', fill: '#2F6E9E' }, '따뜻한 수면에서 증발한 수증기 ↑', E.dyn);
-      if (on != null && st.s >= on) {   // 김처럼 피어오르는 물안개
-        const x0 = X('steam', on), x1 = Math.min(W - 6, px + 30);
-        for (let x = x0; x < x1; x += 22) {
-          const R = rng(Math.round(x));
-          const hgt = (28 + 42 * dens) * (0.6 + R() * 0.6);
-          s('path', { d: `M${x} ${yG} C${x - 10} ${yG - hgt * 0.4} ${x + 12} ${yG - hgt * 0.7} ${x + 2} ${yG - hgt}`, fill: 'none', stroke: '#FFFFFF', 'stroke-width': 9 + R() * 5, 'stroke-linecap': 'round', opacity: 0.55 * dens }, E.fog);
-        }
-        fogBand(E.fog, x0, x1, yG, 16 + 20 * dens, dens * 0.9, 13);
-      }
-      info = a.overWater ? '따뜻한 수면 위' : '차가운 육지 위';
-    } else {   // frontal
-      sa(E.sky0, { 'stop-color': '#B7C0C8' }); sa(E.sky1, { 'stop-color': '#DDE2E6' });
-      const fr = frontGeo(g);
-      // 빗방울: 구름에서 떨어져 찬 공기층을 지나며 증발(아래로 갈수록 작아짐)
-      const R = rng(9), nDrop = st.rain === 'strong' ? 26 : 10;
-      for (let i = 0; i < nDrop; i++) {
-        const x = fr.x0 + 40 + R() * (W - fr.x0 - 50), yTop = g.top + 70, yBot = yG - 6;
-        const t = (R() + st.s * 6) % 1, y = lerp(yTop, yBot, t);
-        const yFront = lerp(yG, fr.yR, (x - fr.x0) / (W - fr.x0));
-        const inCold = y > yFront, shrink = inCold ? clamp(1 - (y - yFront) / Math.max(30, yBot - yFront), 0.25, 1) : 1;
-        s('path', { d: `M${x} ${y} l-2 ${8 * shrink}`, stroke: '#3E6E9C', 'stroke-width': 2, 'stroke-linecap': 'round', opacity: 0.85 }, E.dyn);
-      }
-      for (let i = 0; i < 4; i++) { const x = W * (0.42 + 0.13 * i); wavyUp(E.dyn, x, yG - 14, 18, '#7FA6C8', ph + i, 1.6); }
-      txt({ x: W - 8, y: fr.yR + (yG - fr.yR) * 0.5 + 20, 'text-anchor': 'end', class: 'lb-sm halo', fill: '#2F5E88' }, '빗방울 증발 → 수증기 증가', E.dyn);
-      fogBand(E.fog, fr.x0 + 10, W - 4, yG, 22 + 40 * dens, dens, 17);
-      px = W * 0.62; py = yG - 32;
-      info = '찬 공기층';
-    }
-    sa(E.info, { fill: st.s < 0.9 ? '#F2F4F8' : '#263746', class: st.s < 0.9 ? 'lb' : 'lb halo-sky' });
-    E.info.textContent = st.kind === 'radiation' ? info : '';      // 밤사이 시각 (다른 안개는 현재 수치 칸에)
+    const sc = SCENE[st.kind](g, a, on, dens, ph), info = sc.info;
+    sa(E.clock, { opacity: st.kind === 'radiation' ? 1 : 0 });
+    if (st.kind === 'radiation') { E.clockT.textContent = `🕘 ${info}`; sa(E.clockBg, { width: Math.max(90, (bboxW(E.clockT) || 80) + 24) }); }
     // 공기 덩어리와 이름표 (기온 · 이슬점)
-    E.parcel.set(px, py, 15, a.saturated ? clamp(0.3 + a.water / 2, 0.3, 1) : 0);
+    E.parcel.set(sc.px, sc.py, sc.r, a.saturated ? clamp(0.3 + a.water / 2, 0.3, 1) : 0);
     E.tagT.textContent = `기온 ${fT(a.T)} ℃`; E.tagD.textContent = `이슬점 ${fT(a.Td)} ℃`;
-    const tw = 112, th = 42, tx = clamp(px - tw / 2, 4, W - tw - 4), tyy = clamp(py - 24 - th, 44, yG - th);
-    sa(E.tagBg, { x: tx, y: tyy, width: tw, height: th });
+    const tw = 112, th = 42, tx = clamp(sc.px - tw / 2, 4, W - tw - 4), tyy = clamp(sc.py - sc.r - 10 - th, 60, yG - th);
+    sa(E.tagBg, { x: tx, y: tyy, width: tw, height: th, stroke: a.saturated ? 'var(--dew)' : '#C9C4B8' });
     sa(E.tagT, { x: tx + 9, y: tyy + 17 }); sa(E.tagD, { x: tx + 9, y: tyy + 35 });
+    if (sc.fl) {      // 안개 이름: 기온·이슬점 이름표와 겹치면 비켜 놓음
+      const t = lbl(E.top, sc.fl.x, sc.fl.y, sc.fl.t, '#33414E', { 'text-anchor': 'middle', class: 'lb-sm halo-sky' });
+      const bb = t.getBBox(), tag = { x: tx - 6, y: tyy - 6, width: tw + 12, height: th + 12 };
+      if (!(bb.x + bb.width < tag.x || tag.x + tag.width < bb.x || bb.y + bb.height < tag.y || tag.y + tag.height < bb.y)) {
+        const leftRoom = tag.x - 6, rightRoom = W - (tag.x + tag.width) - 6;
+        if (Math.max(leftRoom, rightRoom) >= bb.width) sa(t, rightRoom >= leftRoom ? { x: tag.x + tag.width + 6, 'text-anchor': 'start' } : { x: tag.x - 6, 'text-anchor': 'end' });
+        else sa(t, { y: tag.y - 8 });
+      }
+    }
 
     /* 그래프 */
     const pts = [];
@@ -528,23 +698,27 @@ const FogLab = (function () {
     const xP = G.gx(a.T), yP = G.gy(a.e);
     sa(E.gPt, { cx: xP, cy: yP });
     sa(E.gPtT, { x: xP + 12, y: yP - 10 }); E.gPtT.textContent = a.saturated ? '포화!' : '공기';
-    clear(E.gGuide); clear(E.gProc);
+    clear(E.gGuide);
     const dash = { stroke: '#4E5D6A', 'stroke-width': 1.6, 'stroke-dasharray': '5 4', fill: 'none' };
     if (cool) {        // 수증기량 그대로 → 왼쪽으로: 곡선에 닿는 기온이 이슬점
       const xd = G.gx(a.Td);
-      if (!a.saturated) s('line', Object.assign({ x1: xd, x2: xP - 9, y1: yP, y2: yP }, dash), E.gGuide);
+      if (!a.saturated && xP - xd > 30) {       // 수증기량은 그대로 → 왼쪽으로 가서 곡선(이슬점)에 닿음
+        arrowLine(E.gGuide, xP - 11, yP, xd + 9, yP, '#C65040', 2.2, '6 4');
+        txt({ x: (xP + xd) / 2, y: yP - 9, 'text-anchor': 'middle', class: 'lb-sm halo', fill: '#9C3B2E' }, '← 냉각', E.gGuide);
+      }
       s('line', Object.assign({ x1: xd, x2: xd, y1: yP, y2: G.Y0 }, dash, { stroke: 'var(--dew)' }), E.gGuide);
       s('circle', { cx: xd, cy: yP, r: 5, fill: 'var(--dew)', stroke: '#fff', 'stroke-width': 1.5 }, E.gGuide);
       txt({ x: xd - 8, y: G.Y0 - 8, 'text-anchor': 'end', class: 'lb-sm halo tnum', fill: 'var(--dew)' }, `이슬점 ${fT(a.Td)} ℃`, E.gGuide);
-      if (st.s < 0.02) { arrowH(E.gProc, xP - 18, xP - 70, yP + 22, '#C65040', 2.5); txt({ x: xP - 44, y: yP + 42, 'text-anchor': 'middle', class: 'lb-sm halo', fill: '#9C3B2E' }, '냉각', E.gProc); }
     } else {           // 기온 그대로 → 위로: 곡선에 닿는 수증기압이 포화 수증기압
       const yE = G.gy(a.E);
-      if (!a.saturated) s('line', Object.assign({ x1: xP, x2: xP, y1: yP - 9, y2: yE }, dash), E.gGuide);
+      if (!a.saturated && yP - yE > 30) {       // 기온은 그대로 → 위로 가서 곡선(포화 수증기압)에 닿음
+        arrowLine(E.gGuide, xP, yP - 11, xP, yE + 9, '#C65040', 2.2, '6 4');
+        txt({ x: xP - 10, y: (yP + yE) / 2 + 5, 'text-anchor': 'end', class: 'lb-sm halo', fill: '#9C3B2E' }, '수증기 증가 ↑', E.gGuide);
+      }
       if (!a.saturated) {
         s('circle', { cx: xP, cy: yE, r: 5, fill: C_SAT, stroke: '#fff', 'stroke-width': 1.5 }, E.gGuide);
         txt({ x: xP + 10, y: yE - 8, class: 'lb-sm halo tnum', fill: C_SAT }, `포화 수증기압 ${fmt(a.E, 1)} hPa`, E.gGuide);
       }
-      if (st.s < 0.02) { s('path', { d: `M${xP - 22} ${yP - 10} L${xP - 22} ${yP - 58} M${xP - 28} ${yP - 50} L${xP - 22} ${yP - 58} L${xP - 16} ${yP - 50}`, fill: 'none', stroke: '#C65040', 'stroke-width': 2.5, 'stroke-linecap': 'round' }, E.gProc); txt({ x: xP - 30, y: yP - 30, 'text-anchor': 'end', class: 'lb-sm halo', fill: '#9C3B2E' }, '수증기 증가', E.gProc); }
     }
 
     /* 수치 */
