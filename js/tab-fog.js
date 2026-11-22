@@ -32,7 +32,7 @@ const FogLab = (function () {
   const XR = { min: -5, max: 25, step: 5 }, YR = { min: 0, max: 32, step: 5 };
   const C_SAT = '#2F78B5';
   const L = Object.assign(baseLab(), { id: 'fog' });
-  const st = Object.assign({}, DEF, { s: 0, playing: false, cmp: null, notice: '', seen: {} });
+  const st = Object.assign({}, DEF, { s: 0, playing: false, notice: '', seen: {} });
   L.st = st;
   let sh, ui = {}, E = {}, G = null, ch = null;
 
@@ -46,11 +46,6 @@ const FogLab = (function () {
     return onsetMemo.v;
   }
   const group = () => Physics.FOG[st.kind].group;
-  const condLabel = (o) => {
-    o = o || st;
-    return { radiation: `${o.sky === 'clear' ? '맑음' : '흐림'} · 바람 ${o.wind === 'calm' ? '약함' : '강함'}`, advection: `찬 해수면 ${fT(o.sea)} ℃`,
-      upslope: `산 높이 ${fZ(o.M)} km`, steam: `수면 ${fT(o.water)} ℃`, frontal: o.rain === 'strong' ? '강한 비' : '약한 비' }[o.kind];
-  };
 
   /* ───────── 진행 · 단계 ───────── */
   function stageList() { const on = onset(); const S = [0]; if (on != null && on > 1e-6 && on < 1 - 1e-6) S.push(on); S.push(1); return S; }
@@ -113,13 +108,6 @@ const FogLab = (function () {
     syncCond();
     rebuildAll();
   }
-  function saveCompare() {
-    st.cmp = { kind: st.kind, sky: st.sky, wind: st.wind, sea: st.sea, M: st.M, water: st.water, rain: st.rain, sRec: st.s };
-    st.cmp.label = `${NAME[st.cmp.kind]} · ${condLabel(st.cmp)}`;
-    L.emit('compare', {});
-    ui.cmp.show(st.cmp.label); renderLegend(); rebuildAll();
-  }
-
   /* ───────── 화면 만들기 ───────── */
   function init(root) {
     sh = makeShell(root, {
@@ -137,14 +125,10 @@ const FogLab = (function () {
       });
       return { el, set(v) { segs.forEach(sg => sg.set(v)); } };
     })();
-    ui.condBox = h('div', { class: 'cond-group fog-cond' });
-    const tail = h('div', { class: 'cond-tail' });
-    ui.cmp = CompareUI(tail, saveCompare, () => { st.cmp = null; ui.cmp.show(''); renderLegend(); rebuildAll(); });
-    sh.cond.append(ui.kind.el, ui.condBox, tail);
+    sh.cond.append(ui.kind.el);
+    ui.condBox = h('div', { class: 'fog-cond' });     // 조건 바꾸기는 아래 「자유 탐구 · 도전」 안에
     buildCond();
 
-    ui.badge = h('span', { class: 'stab-badge' });
-    sh.sceneHead.append(ui.badge);
     ui.legend = h('span', { class: 'legend' });
     sh.graphLegend.append(ui.legend);
 
@@ -155,14 +139,12 @@ const FogLab = (function () {
       { key: 'rh', label: '상대 습도' },
       { key: 'fog', label: '안개' }
     ]);
-    ui.ctrl = ControlBar(sh.ctrl, { play, prev: () => step(-1), next: () => step(1), reset: resetMotion, defaults: resetDefaults });
-    ui.ctrl.prev.title = ui.ctrl.next.title = '처음 · 안개가 생기기 시작한 순간 · 끝으로 이동';
-    ui.stages = h('div', { class: 'stages', role: 'group', 'aria-label': '단계 이동' });
-    ui.stageBtns = [0, 1, 2].map(i => { const b = Btn('', 'sm', () => goStage(i)); ui.stages.appendChild(b); return b; });
-    ui.prog = h('input', { type: 'range', min: 0, max: 1000, step: 1, value: 0, 'aria-label': '안개 과정 진행' });
-    ui.prog.style.setProperty('--c', 'var(--ink)');
-    ui.prog.addEventListener('input', () => { pause(); setS(+ui.prog.value / 1000); });
-    ui.ctrl.slot.append(ui.stages, h('div', { class: 'progress' }, h('span', { class: 'lbl', text: '진행' }), ui.prog));
+    // 아래 조작은 「재생」과 「다음 단계」만 (처음 → 안개가 생기기 시작한 순간 → 끝)
+    ui.play = Btn('▶ 재생', 'primary play', play);
+    ui.next = Btn('다음 단계 ▶', '', () => step(1), { title: '처음 → 안개가 생기기 시작한 순간 → 끝' });
+    ui.stepHint = h('span', { class: 'rel-hint show' });
+    sh.ctrl.classList.add('act-bar');
+    sh.ctrl.append(ui.play, ui.next, ui.stepHint);
 
     buildMore();
     buildChallenges();
@@ -205,7 +187,10 @@ const FogLab = (function () {
     ui.table = h('div');
     m.appendChild(Fold('안개의 종류 정리', ui.table, true, 'wide'));
     ui.chBox = h('div');
-    m.appendChild(Fold('더 해 보기 <span class="tag">도전 2</span>', ui.chBox, false));
+    m.appendChild(Fold('자유 탐구 · 도전 <span class="tag">조건 바꾸기 · 도전 2</span>', h('div', null,
+      h('p', { class: 'note', text: '조건을 바꿔 안개가 생기지 않는 경우와 비교해 볼 수 있어요. 조건을 바꾸면 처음부터 다시 봐요.' }),
+      ui.condBox, h('div', { class: 'ch-row' }, Btn('조건 기본값', 'sm', resetDefaults)),
+      h('div', { class: 'more-sec' }, h('h4', { text: '도전' }), ui.chBox)), false));
     renderTable(true);
   }
   function renderTable(force) {
@@ -454,11 +439,11 @@ const FogLab = (function () {
         c.rect(cx0, g.top + 30, W - cx0 + 10, Math.max(10, fr.yR - g.top - 46), 16);
         for (let i = 0; i < 8; i++) c.circle(cx0 + 10 + (W - cx0) * i / 7, g.top + 30, 20 + (i % 3) * 6);
       }, 0.95);
-      lbl(S0, cx0 + 20, g.top + 64, '비구름 (난층운)', '#55606A', { class: 'lb-sm' });
+      lbl(S0, cx0 + 20, g.top + 64, '비구름', '#55606A', { class: 'lb-sm' });
       s('line', { x1: fr.x0, y1: yG, x2: W, y2: fr.yR, stroke: '#B0513A', 'stroke-width': 3.5 }, S0);
       for (let i = 1; i <= 5; i++) { const t = i / 6, x = lerp(fr.x0, W, t), y = lerp(yG, fr.yR, t); s('circle', { cx: x, cy: y, r: 6.5, fill: '#B0513A' }, S0); }
       const lx = lerp(fr.x0, W, 0.3), ly = fr.yAt(lx) - 12;
-      lbl(S0, lx, ly, '전선면 (온난 전선)', '#8A3A28', { transform: `rotate(${fr.ang} ${lx} ${ly})` });
+      lbl(S0, lx, ly, '전선면', '#8A3A28', { transform: `rotate(${fr.ang} ${lx} ${ly})` });
       s('rect', { x: 0, y: yG, width: W, height: g.H - yG, fill: '#8FA582' }, S0);
       [[0.5, 22, 16, '#E9E1D2', '#9C5A44'], [0.58, 26, 18, '#DDD3C1', '#7F4B3B'], [0.86, 24, 17, '#E6DCCB', '#9C5A44']].forEach(([t, w, hh, c1, c2]) => house(S0, W * t, yG + 1, w, hh, c1, c2, false));
       [0.66, 0.74, 0.95].forEach(t => roundTree(S0, W * t, yG + 2, 30, '#56794A'));
@@ -532,7 +517,7 @@ const FogLab = (function () {
         const x0 = X('advection', on) - 10, x1 = Math.min(W + 20, px + 60 + (st.s - on) * W * 0.5);
         mist(E.fog, x0, x1, yG + 6, 30 + 52 * dens, dens, 7);
         mist(E.fog, x0 + 30, x1, yG + 4, 18 + 30 * dens, dens * 0.9, 8);
-        fl = { x: Math.min((x0 + x1) / 2, W * 0.7), y: yG - 40 - 50 * dens, t: '해안으로 밀려오는 이류 안개 (해무)' };
+        fl = { x: Math.min((x0 + x1) / 2, W * 0.7), y: yG - 40 - 50 * dens, t: '해안으로 밀려오는 이류 안개' };
       }
       return { px, py, r: 15, info: a.overCold ? '차가운 해수면 위' : '따뜻한 바다 위', fl };
     },
@@ -580,7 +565,7 @@ const FogLab = (function () {
           s('path', { d: `M${x} ${yG} C${x - 12 + sw} ${yG - hgt * 0.35} ${x + 14 + sw} ${yG - hgt * 0.65} ${x + sw} ${yG - hgt}`, fill: 'none', stroke: '#FFFFFF', 'stroke-width': 10 + R() * 8, 'stroke-linecap': 'round', opacity: 0.85 }, grp);
         }
         mist(E.fog, x0 - 10, x1 + 10, yG + 6, 18 + 26 * dens, dens, 13);
-        fl = { x: (x0 + x1) / 2, y: yG - 74 - 60 * dens, t: '김처럼 피어오르는 증발 안개 (물안개)' };
+        fl = { x: (x0 + x1) / 2, y: yG - 74 - 60 * dens, t: '김처럼 피어오르는 증발 안개' };
       }
       return { px, py, r: 15, info: a.overWater ? '따뜻한 수면 위' : '차가운 육지 위', fl };
     },
@@ -642,20 +627,14 @@ const FogLab = (function () {
     txt({ x: gx(17.5) - 8, y: gy(Physics.satVapor(17.5)) - 10, 'text-anchor': 'end', class: 'lb halo', fill: C_SAT }, '포화 수증기압 곡선', svg);
     txt({ x: X0 + 10, y: Y1 + 20, class: 'lb-sm halo', fill: '#4F7AA0' }, '곡선 위: 남는 수증기가 응결', svg);   // 곡선이 지나지 않는 왼쪽 위
     txt({ x: X1 - 10, y: Y0 - 12, 'text-anchor': 'end', class: 'lb-sm halo', fill: '#8D959C' }, '곡선 아래: 불포화', svg);
-    E.cmpG = s('g', { opacity: 0.35 }, clipG);
     E.gGuide = s('g', null, svg);
     E.gPath = s('path', { fill: 'none', stroke: 'var(--temp)', 'stroke-width': 3.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, clipG);
     E.gStart = s('circle', { r: 5.5, fill: '#fff', stroke: 'var(--temp)', 'stroke-width': 2.5 }, svg);
     E.gPt = s('circle', { r: 8, fill: 'var(--temp)', stroke: '#fff', 'stroke-width': 2.5 }, svg);
     E.gPtT = txt({ class: 'lb halo', fill: 'var(--temp)' }, '', svg);
-    if (st.cmp) {
-      const pts = [];
-      for (let i = 0; i <= 80; i++) { const a = A(st.cmp.sRec * i / 80, st.cmp); pts.push([a.T, a.e]); }
-      s('path', { d: 'M' + pts.map(p => `${gx(p[0]).toFixed(1)} ${gy(p[1]).toFixed(1)}`).join(' L'), fill: 'none', stroke: '#C65040', 'stroke-width': 3, 'stroke-dasharray': '7 5' }, E.cmpG);
-    }
   }
   function renderLegend() {
-    ui.legend.innerHTML = legendHTML(C_SAT, '', '포화 수증기압') + legendHTML('var(--temp)', '', '공기의 변화') + (st.cmp ? legendHTML('#E3A99F', 'dash', '비교') : '');
+    ui.legend.innerHTML = legendHTML(C_SAT, '', '포화 수증기압') + legendHTML('var(--temp)', '', '공기의 변화');
   }
 
   const bboxW = el => { try { return el.getBBox().width; } catch (e) { return 0; } };
@@ -728,9 +707,6 @@ const FogLab = (function () {
     ui.ro.set('rh', `${fmt(a.rh, 0)}<small>%</small>`, a.saturated ? '포화' : '불포화');
     ui.ro.set('fog', `<span style="font-size:21px">${a.saturated ? (dens > 0.75 ? '짙은 안개' : '안개 생김') : '없음'}</span>`, a.saturated ? '수증기가 응결' : (cool ? `이슬점까지 ${fT(a.T - a.Td)} ℃` : `포화까지 ${fmt(a.E - a.e, 1)} hPa`));
     renderGuide(a, on);
-    const gt = cool ? '공기의 냉각 → 기온이 이슬점까지' : '수증기량 증가 → 포화 수증기압까지';
-    if (ui.badge.textContent !== gt) ui.badge.textContent = gt;
-    ui.badge.className = 'stab-badge ' + (cool ? 'absolute-stable' : 'conditional');
     if (ch) ch.check();
   }
   function noFogText() {
@@ -766,23 +742,16 @@ const FogLab = (function () {
       : `${{ steam: a.overWater ? '따뜻한 수면에서 증발한 수증기가 찬 공기 속으로 들어와요.' : '차가운 육지 위에서는 수증기량이 그대로예요.', frontal: '빗방울이 찬 공기층을 지나며 증발해 수증기가 늘어요.' }[st.kind]} 수증기압이 포화 수증기압에 이르면 포화돼요.`);
   }
   function renderControls() {
-    if (!ui.ctrl) return;
-    const on = onset();
-    ui.ctrl.setPlay(st.playing, st.s >= 1 - 1e-9 ? '↺ 처음부터 재생' : (st.s > 0 ? '▶ 이어서 재생' : '▶ 재생'));
-    const S = stageList();
-    ui.ctrl.setStep(S.some(v => v < st.s - 1e-9), S.some(v => v > st.s + 1e-9));
-    const names = STAGE[st.kind], P = [0, on, 1];
-    const labels = [`① ${names[0]}`, on == null ? '② 안개 없음' : `② 안개 시작${st.kind === 'radiation' ? ' (' + hourText(on) + ')' : ''}`, `③ ${names[1]}`];
-    ui.stageBtns.forEach((b, i) => {
-      const at = P[i] != null && Math.abs(P[i] - st.s) < 1e-9;
-      if (b.innerHTML !== labels[i]) b.innerHTML = labels[i];
-      b.classList.toggle('accent', at);
-      b.setAttribute('aria-pressed', at ? 'true' : 'false');
-      b.classList.toggle('muted', P[i] == null);
-      b.title = P[i] == null ? '이 조건에서는 끝까지 포화되지 않아요' : '';
-    });
-    if (document.activeElement !== ui.prog) ui.prog.value = Math.round(st.s * 1000);
-    ui.prog.style.setProperty('--fill', (st.s * 100) + '%');
+    if (!ui.play) return;
+    const on = onset(), end = st.s >= 1 - 1e-9;
+    const t = st.playing ? '⏸ 일시정지' : (end ? '↺ 처음부터 재생' : (st.s > 0 ? '▶ 이어서 재생' : '▶ 재생'));
+    if (ui.play.innerHTML !== t) ui.play.innerHTML = t;
+    const nxt = stageList().find(v => v > st.s + 1e-9);
+    ui.next.disabled = nxt == null;
+    const names = STAGE[st.kind];
+    const hint = end ? '처음부터 다시 보려면 「↺ 처음부터 재생」을 누르세요.'
+      : (nxt != null && on != null && Math.abs(nxt - on) < 1e-9 ? '다음 단계: 안개가 생기기 시작하는 순간' : `다음 단계: 끝 (${names[1]})`);
+    if (ui.stepHint.textContent !== hint) ui.stepHint.textContent = hint;
   }
 
   return {
@@ -790,6 +759,6 @@ const FogLab = (function () {
     pause() { pause(); },
     onShow() { layout(); },
     hasFrame: () => !!(sh && sh.frame),
-    api: { setS, setKind, setCond, play, step, goStage, resetMotion, resetDefaults, saveCompare, st, state: () => A(), onset: () => onset() }
+    api: { setS, setKind, setCond, play, step, goStage, resetMotion, resetDefaults, st, state: () => A(), onset: () => onset() }
   };
 })();
